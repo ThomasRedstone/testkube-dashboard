@@ -1,0 +1,28 @@
+{{if .}}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Namespace</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .}}
+        <tr>
+            <td><a href="/tests/{{.Name}}">{{.Name}}</a></td>
+            <td>{{.Type}}</td>
+            <td>{{.Namespace}}</td>
+            <td>{{.Created.Format "2006-01-02 15:04:05"}}</td>
+            <td>
+                <button class="btn" hx-post="/tests/{{.Name}}/run" hx-swap="none">Run</button>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<p>No tests found.</p>
+{{end}}
