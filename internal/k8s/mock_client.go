@@ -63,3 +63,38 @@ func (s *MockK8sService) ListExecutions(ctx context.Context, namespace, testName
 func (s *MockK8sService) GetExecutionLogs(ctx context.Context, namespace, executionID string) (string, error) {
 	return fmt.Sprintf("Logs for execution %s\nStep 1: Init...\nStep 2: Run...\nStep 3: Done.", executionID), nil
 }
+
+func (s *MockK8sService) GetDashboardSummary(ctx context.Context, namespace string) (*app.DashboardSummary, error) {
+	// Aggregate data from existing methods
+	tests, _ := s.ListTests(ctx, namespace)
+	totalTests := len(tests)
+
+	var totalExecutions int
+	var passedExecutions int
+	var recentFailures []app.TestExecution
+
+	for _, t := range tests {
+		execs, _ := s.ListExecutions(ctx, namespace, t.Name)
+		totalExecutions += len(execs)
+		for _, e := range execs {
+			if e.Status == "passed" {
+				passedExecutions++
+			} else if e.Status == "failed" {
+				recentFailures = append(recentFailures, e)
+			}
+		}
+	}
+
+	passRate := 0.0
+	if totalExecutions > 0 {
+		passRate = (float64(passedExecutions) / float64(totalExecutions)) * 100.0
+	}
+
+	return &app.DashboardSummary{
+		TotalTests:      totalTests,
+		TotalExecutions: totalExecutions,
+		PassRate:        passRate,
+		RecentFailures:  recentFailures,
+		RunningTests:    0, // Mock has none running
+	}, nil
+}

@@ -19,3 +19,12 @@ type TestExecution struct {
 	StartTime time.Time
 	EndTime   time.Time
 }
+
+// DashboardSummary contains aggregated metrics for the dashboard
+type DashboardSummary struct {
+	TotalTests      int
+	TotalExecutions int
+	PassRate        float64 // Percentage 0-100
+	RecentFailures  []TestExecution
+	RunningTests    int
+}

@@ -55,7 +55,7 @@ func (s *Server) initTemplates() {
 	}
 
 	// Pre-parse pages that use the layout
-	pages := []string{"index.html", "test_detail.html"}
+	pages := []string{"index.html", "test_detail.html", "dashboard.html"}
 	for _, page := range pages {
 		t, err := s.layout.Clone()
 		if err != nil {
@@ -93,7 +93,12 @@ func (s *Server) render(w http.ResponseWriter, templateName string, data interfa
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "index.html", nil)
+	summary, err := s.k8sService.GetDashboardSummary(r.Context(), "testkube")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.render(w, "dashboard.html", summary)
 }
 
 func (s *Server) handleListTests(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +119,30 @@ func (s *Server) handleListTests(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		// Render the full page for direct navigation
+		// We reuse index.html which (previously) loaded tests via htmx.
+		// But now we want to render the test list.
+		// Let's change index.html to be the test list wrapper.
+		// Or better: pass the data to index.html and have it render the list directly (server-side).
+
+		// Wait, "index.html" currently has:
+		/*
+		{{define "content"}}
+		    <div hx-get="/tests" hx-trigger="load" hx-swap="innerHTML">
+		        Loading tests...
+		    </div>
+		{{end}}
+		*/
+
+		// Since we want /tests to be a distinct page, let's keep index.html for that purpose?
+		// No, let's rename the concept.
+		// / -> Dashboard (renders dashboard.html)
+		// /tests -> Test List (renders tests_page.html?)
+
+		// Reuse index.html as "tests page" for now, as it just triggers the HTMX load.
+		// This is consistent with previous behavior, but we are moving it to /tests
+
+		s.render(w, "index.html", nil)
 	}
 }
 

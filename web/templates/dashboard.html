@@ -1,0 +1,44 @@
+{{define "content"}}
+<div class="dashboard-grid">
+    <div class="card">
+        <h3>Total Tests</h3>
+        <p class="stat">{{.TotalTests}}</p>
+    </div>
+    <div class="card">
+        <h3>Pass Rate</h3>
+        <p class="stat">{{printf "%.1f" .PassRate}}%</p>
+    </div>
+    <div class="card">
+        <h3>Total Executions</h3>
+        <p class="stat">{{.TotalExecutions}}</p>
+    </div>
+</div>
+
+<div class="recent-failures">
+    <h3>Recent Failures</h3>
+    {{if .RecentFailures}}
+    <table>
+        <thead>
+            <tr>
+                <th>Test</th>
+                <th>Time</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .RecentFailures}}
+            <tr>
+                <td><a href="/tests/{{.TestName}}">{{.TestName}}</a></td>
+                <td>{{.StartTime.Format "2006-01-02 15:04:05"}}</td>
+                <td>
+                    <button class="btn" onclick="window.open('/tests/{{.TestName}}/executions/{{.ID}}/logs', '_blank')">Logs</button>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <p>No recent failures.</p>
+    {{end}}
+</div>
+{{end}}
