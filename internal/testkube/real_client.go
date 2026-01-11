@@ -354,6 +354,18 @@ func extractWorkflowType(image string) string {
 		return "chaosmesh"
 	case strings.Contains(lowerImage, "signoz"):
 		return "signoz"
+	case strings.Contains(lowerImage, "testtrace"):
+		return "testtrace"
+	case strings.Contains(lowerImage, "infracost"):
+		return "infracost"
+	case strings.Contains(lowerImage, "emba"):
+		return "emba"
+	case strings.Contains(lowerImage, "emqtt-bench"):
+		return "emqtt-bench"
+	case strings.Contains(lowerImage, "thingboard") || strings.Contains(lowerImage, "thingsboard"):
+		return "thingboard"
+	case strings.Contains(lowerImage, "kubekert"):
+		return "kubekert"
 	default:
 		return "custom"
 	}

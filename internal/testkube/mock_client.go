@@ -59,6 +59,30 @@ func (c *MockClient) generateMockData() {
 			Name: "observability-check", Namespace: "testkube", Type: "signoz", Created: time.Now().Add(-3 * 24 * time.Hour),
 			LastRun: time.Now().Add(-6 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
 		},
+		{
+			Name: "trace-analysis", Namespace: "testkube", Type: "testtrace", Created: time.Now().Add(-4 * 24 * time.Hour),
+			LastRun: time.Now().Add(-8 * time.Hour), LastStatus: "passed", PassRateLast7d: 98,
+		},
+		{
+			Name: "cost-estimation", Namespace: "testkube", Type: "infracost", Created: time.Now().Add(-2 * 24 * time.Hour),
+			LastRun: time.Now().Add(-1 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "firmware-security", Namespace: "testkube", Type: "emba", Created: time.Now().Add(-10 * 24 * time.Hour),
+			LastRun: time.Now().Add(-48 * time.Hour), LastStatus: "failed", PassRateLast7d: 60,
+		},
+		{
+			Name: "mqtt-load-test", Namespace: "testkube", Type: "emqtt-bench", Created: time.Now().Add(-5 * 24 * time.Hour),
+			LastRun: time.Now().Add(-2 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "iot-platform-test", Namespace: "testkube", Type: "thingboard", Created: time.Now().Add(-20 * 24 * time.Hour),
+			LastRun: time.Now().Add(-5 * 24 * time.Hour), LastStatus: "passed", PassRateLast7d: 95,
+		},
+		{
+			Name: "cluster-certification", Namespace: "testkube", Type: "kubekert", Created: time.Now().Add(-15 * 24 * time.Hour),
+			LastRun: time.Now().Add(-12 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
 	}
 
 	// Generate executions

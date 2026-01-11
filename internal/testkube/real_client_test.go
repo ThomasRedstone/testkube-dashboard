@@ -203,6 +203,12 @@ func TestExtractWorkflowType(t *testing.T) {
 		{"defectdojo/defectdojo-django:latest", "defectdojo"},
 		{"chaos-mesh/chaos-mesh:latest", "chaosmesh"},
 		{"signoz/signoz:latest", "signoz"},
+		{"testtrace:latest", "testtrace"},
+		{"infracost/infracost:latest", "infracost"},
+		{"emba:latest", "emba"},
+		{"emqtt-bench:latest", "emqtt-bench"},
+		{"thingsboard/tb-node:latest", "thingboard"},
+		{"kubekert:latest", "kubekert"},
 		{"unknown:latest", "custom"},
 	}
 
