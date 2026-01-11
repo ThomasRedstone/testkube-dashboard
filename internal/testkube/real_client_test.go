@@ -127,6 +127,32 @@ func TestRealClient_GetWorkflows(t *testing.T) {
 						}{Image: "k6"},
 					},
 				},
+				{
+					Name:      "wf-2",
+					Namespace: "test",
+					Spec: struct {
+						Container struct {
+							Image string `json:"image"`
+						} `json:"container"`
+					}{
+						Container: struct {
+							Image string `json:"image"`
+						}{Image: "trivy"},
+					},
+				},
+				{
+					Name:      "wf-3",
+					Namespace: "test",
+					Spec: struct {
+						Container struct {
+							Image string `json:"image"`
+						} `json:"container"`
+					}{
+						Container: struct {
+							Image string `json:"image"`
+						}{Image: "kubescape"},
+					},
+				},
 			}
 			json.NewEncoder(w).Encode(response)
 			return
@@ -148,10 +174,42 @@ func TestRealClient_GetWorkflows(t *testing.T) {
 		t.Fatalf("GetWorkflows failed: %v", err)
 	}
 
-	if len(workflows) != 1 {
-		t.Errorf("expected 1 workflow, got %d", len(workflows))
+	if len(workflows) != 3 {
+		t.Errorf("expected 3 workflows, got %d", len(workflows))
 	}
 	if workflows[0].Type != "k6" {
 		t.Errorf("expected type k6, got %s", workflows[0].Type)
+	}
+	if workflows[1].Type != "trivy" {
+		t.Errorf("expected type trivy, got %s", workflows[1].Type)
+	}
+	if workflows[2].Type != "kubescape" {
+		t.Errorf("expected type kubescape, got %s", workflows[2].Type)
+	}
+}
+
+func TestExtractWorkflowType(t *testing.T) {
+	tests := []struct {
+		image    string
+		expected string
+	}{
+		{"playwright:v1", "playwright"},
+		{"k6-custom:latest", "k6"},
+		{"cypress/included:10.0.0", "cypress"},
+		{"aquasec/trivy:latest", "trivy"},
+		{"kubescape/kubescape:v2", "kubescape"},
+		{"sonarqube:latest", "sonarqube"},
+		{"returntocorp/semgrep:latest", "semgrep"},
+		{"defectdojo/defectdojo-django:latest", "defectdojo"},
+		{"chaos-mesh/chaos-mesh:latest", "chaosmesh"},
+		{"signoz/signoz:latest", "signoz"},
+		{"unknown:latest", "custom"},
+	}
+
+	for _, tt := range tests {
+		result := extractWorkflowType(tt.image)
+		if result != tt.expected {
+			t.Errorf("extractWorkflowType(%s) = %s, expected %s", tt.image, result, tt.expected)
+		}
 	}
 }
