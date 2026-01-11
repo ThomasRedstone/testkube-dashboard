@@ -1,0 +1,58 @@
+{{define "content"}}
+<div class="execution-header">
+    <h1>Execution {{.Execution.Name}}</h1>
+    <span class="status-badge status-{{.Execution.Status}}">{{.Execution.Status}}</span>
+</div>
+
+<div class="execution-metadata">
+    <div class="meta-item">
+        <label>Workflow:</label>
+        <span><a href="/workflows/{{.Execution.WorkflowName}}">{{.Execution.WorkflowName}}</a></span>
+    </div>
+    <div class="meta-item">
+        <label>Duration:</label>
+        <span>{{.Execution.Duration}}</span>
+    </div>
+    <div class="meta-item">
+        <label>Branch:</label>
+        <span>{{.Execution.Branch}}</span>
+    </div>
+</div>
+
+<div class="report-actions">
+    <a href="/executions/{{.Execution.ID}}/report" class="btn-primary" target="_blank">
+        View Full Test Report
+    </a>
+</div>
+
+<div class="test-breakdown">
+    <h2>Test Cases ({{len .TestCases}})</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Test Name</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .TestCases}}
+            <tr class="test-row test-{{.Status}}">
+                <td>{{.TestName}}</td>
+                <td><span class="status-{{.Status}}">{{.Status}}</span></td>
+                <td>{{.DurationMs}}ms</td>
+                <td>{{.ErrorMessage}}</td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+
+<div class="logs-section">
+    <h2>Console Logs</h2>
+    <pre hx-get="/executions/{{.Execution.ID}}/logs"
+         hx-trigger="load"
+         hx-swap="innerHTML">Loading logs...</pre>
+</div>
+{{end}}

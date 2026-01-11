@@ -1,44 +1,68 @@
 {{define "content"}}
 <div class="dashboard-grid">
-    <div class="card">
-        <h3>Total Tests</h3>
-        <p class="stat">{{.TotalTests}}</p>
-    </div>
-    <div class="card">
+    <div class="metric-card">
         <h3>Pass Rate</h3>
-        <p class="stat">{{printf "%.1f" .PassRate}}%</p>
+        <div class="stat">{{.PassRate}}%</div>
+        <div class="trend {{if gt .PassRateTrend "0"}}up{{else}}down{{end}}">
+            {{.PassRateTrend}}
+        </div>
+        <div class="chart">
+            {{.PassRateChart}}
+        </div>
     </div>
-    <div class="card">
-        <h3>Total Executions</h3>
-        <p class="stat">{{.TotalExecutions}}</p>
+
+    <div class="metric-card">
+        <h3>Avg Duration</h3>
+        <div class="stat">{{.AvgDuration}}</div>
+        <div class="trend {{if lt .DurationTrend "0"}}up{{else}}down{{end}}">
+            {{.DurationTrend}}
+        </div>
+        <div class="chart">
+            {{.DurationChart}}
+        </div>
+    </div>
+
+    <div class="metric-card">
+        <h3>Total Tests</h3>
+        <div class="stat">{{.TotalTests}}</div>
+    </div>
+
+    <div class="metric-card">
+        <h3>Flaky Tests</h3>
+        <div class="stat">{{len .FlakyTests}}</div>
     </div>
 </div>
 
-<div class="recent-failures">
-    <h3>Recent Failures</h3>
-    {{if .RecentFailures}}
-    <table>
-        <thead>
-            <tr>
-                <th>Test</th>
-                <th>Time</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{range .RecentFailures}}
-            <tr>
-                <td><a href="/tests/{{.TestName}}">{{.TestName}}</a></td>
-                <td>{{.StartTime.Format "2006-01-02 15:04:05"}}</td>
-                <td>
-                    <button class="btn" onclick="window.open('/tests/{{.TestName}}/executions/{{.ID}}/logs', '_blank')">Logs</button>
-                </td>
-            </tr>
-            {{end}}
-        </tbody>
-    </table>
-    {{else}}
-    <p>No recent failures.</p>
-    {{end}}
+<div class="dashboard-sections">
+    <div class="section">
+        <h2>Recent Failures</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Execution</th>
+                    <th>Workflow</th>
+                    <th>Status</th>
+                    <th>When</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .RecentFailures}}
+                <tr>
+                    <td><a href="/executions/{{.ID}}">{{.Name}}</a></td>
+                    <td><a href="/workflows/{{.WorkflowName}}">{{.WorkflowName}}</a></td>
+                    <td><span class="status status-{{.Status}}">{{.Status}}</span></td>
+                    <td>{{.StartTime.Format "Jan 02 15:04"}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Flaky Tests Alert</h2>
+        <div hx-get="/api/v1/flaky-tests" hx-trigger="load">
+            Loading...
+        </div>
+    </div>
 </div>
 {{end}}
