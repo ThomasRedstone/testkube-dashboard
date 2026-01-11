@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/testkube/dashboard/internal/database"
 	"github.com/testkube/dashboard/internal/server"
@@ -10,8 +11,31 @@ import (
 )
 
 func main() {
-	// Initialize Mock Clients
-	api := testkube.NewMockClient()
+	// Determine which client to use
+	var api testkube.Client
+	var err error
+
+	useMock := os.Getenv("USE_MOCK") == "true"
+
+	if useMock {
+		log.Println("Using MOCK Testkube API client (USE_MOCK=true)")
+		api = testkube.NewMockClient()
+	} else {
+		log.Println("Using REAL Testkube API client")
+		apiURL := os.Getenv("TESTKUBE_API_URL")
+		if apiURL == "" {
+			apiURL = "http://testkube-api-server:8088"
+		}
+		log.Printf("Connecting to Testkube API: %s", apiURL)
+
+		api, err = testkube.NewRealClient()
+		if err != nil {
+			log.Fatalf("Failed to create Testkube API client: %v", err)
+		}
+		log.Println("✓ Connected to Testkube API")
+	}
+
+	// Database still uses mock for Phase 2 (PostgreSQL comes in Phase 3)
 	db := database.NewMockDatabase()
 
 	srv := server.NewServer(api, db)
