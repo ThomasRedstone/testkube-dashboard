@@ -2,4 +2,9 @@ module github.com/testkube/dashboard
 
 go 1.24.3
 
-require github.com/go-chi/chi/v5 v5.2.3 // indirect
+require (
+	github.com/go-chi/chi/v5 v5.2.3 // indirect
+	github.com/go-echarts/go-echarts/v2 v2.6.7 // indirect
+	github.com/lib/pq v1.10.9 // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
+)

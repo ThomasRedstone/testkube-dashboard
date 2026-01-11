@@ -1,0 +1,36 @@
+{{define "content"}}
+<h1>Test Workflows</h1>
+<table class="workflows-table">
+    <thead>
+        <tr>
+            <th>Workflow</th>
+            <th>Type</th>
+            <th>Last Run</th>
+            <th>Status</th>
+            <th>Pass Rate (7d)</th>
+            <th>History</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {{range .Workflows}}
+        <tr>
+            <td><a href="/workflows/{{.Name}}">{{.Name}}</a></td>
+            <td><span class="badge badge-{{.Type}}">{{.Type}}</span></td>
+            <td>{{.LastRun.Format "2006-01-02 15:04"}}</td>
+            <td><span class="status status-{{.LastStatus}}">{{.LastStatus}}</span></td>
+            <td>{{.PassRateLast7d}}%</td>
+            <td>
+                {{.Sparkline}}
+            </td>
+            <td>
+                <button class="btn" hx-post="/workflows/{{.Name}}/run" hx-swap="none">
+                    Run
+                </button>
+                <a href="/workflows/{{.Name}}/history" class="btn-link">History</a>
+            </td>
+        </tr>
+    {{end}}
+    </tbody>
+</table>
+{{end}}
