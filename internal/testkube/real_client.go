@@ -340,6 +340,32 @@ func extractWorkflowType(image string) string {
 		return "postman"
 	case strings.Contains(lowerImage, "cypress"):
 		return "cypress"
+	case strings.Contains(lowerImage, "trivy"):
+		return "trivy"
+	case strings.Contains(lowerImage, "kubescape"):
+		return "kubescape"
+	case strings.Contains(lowerImage, "sonarqube"):
+		return "sonarqube"
+	case strings.Contains(lowerImage, "semgrep"):
+		return "semgrep"
+	case strings.Contains(lowerImage, "defectdojo") || strings.Contains(lowerImage, "defect-dojo"):
+		return "defectdojo"
+	case strings.Contains(lowerImage, "chaos-mesh") || strings.Contains(lowerImage, "chaosmesh"):
+		return "chaosmesh"
+	case strings.Contains(lowerImage, "signoz"):
+		return "signoz"
+	case strings.Contains(lowerImage, "testtrace"):
+		return "testtrace"
+	case strings.Contains(lowerImage, "infracost"):
+		return "infracost"
+	case strings.Contains(lowerImage, "emba"):
+		return "emba"
+	case strings.Contains(lowerImage, "emqtt-bench"):
+		return "emqtt-bench"
+	case strings.Contains(lowerImage, "thingboard") || strings.Contains(lowerImage, "thingsboard"):
+		return "thingboard"
+	case strings.Contains(lowerImage, "kubekert"):
+		return "kubekert"
 	default:
 		return "custom"
 	}

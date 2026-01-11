@@ -19,9 +19,70 @@ func NewMockClient() *MockClient {
 func (c *MockClient) generateMockData() {
 	// Generate some workflows
 	c.workflows = []Workflow{
-		{Name: "frontend-e2e", Namespace: "testkube", Type: "playwright", Created: time.Now().Add(-30 * 24 * time.Hour)},
-		{Name: "backend-integration", Namespace: "testkube", Type: "vitest", Created: time.Now().Add(-60 * 24 * time.Hour)},
-		{Name: "api-load-test", Namespace: "testkube", Type: "k6", Created: time.Now().Add(-90 * 24 * time.Hour)},
+		{
+			Name: "frontend-e2e", Namespace: "testkube", Type: "playwright", Created: time.Now().Add(-30 * 24 * time.Hour),
+			LastRun: time.Now().Add(-1 * time.Hour), LastStatus: "passed", PassRateLast7d: 95,
+		},
+		{
+			Name: "backend-integration", Namespace: "testkube", Type: "vitest", Created: time.Now().Add(-60 * 24 * time.Hour),
+			LastRun: time.Now().Add(-2 * time.Hour), LastStatus: "failed", PassRateLast7d: 80,
+		},
+		{
+			Name: "api-load-test", Namespace: "testkube", Type: "k6", Created: time.Now().Add(-90 * 24 * time.Hour),
+			LastRun: time.Now().Add(-5 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "cluster-security", Namespace: "testkube", Type: "trivy", Created: time.Now().Add(-10 * 24 * time.Hour),
+			LastRun: time.Now().Add(-24 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "k8s-compliance", Namespace: "testkube", Type: "kubescape", Created: time.Now().Add(-15 * 24 * time.Hour),
+			LastRun: time.Now().Add(-48 * time.Hour), LastStatus: "failed", PassRateLast7d: 50,
+		},
+		{
+			Name: "code-quality", Namespace: "testkube", Type: "sonarqube", Created: time.Now().Add(-5 * 24 * time.Hour),
+			LastRun: time.Now().Add(-30 * time.Minute), LastStatus: "passed", PassRateLast7d: 90,
+		},
+		{
+			Name: "static-analysis", Namespace: "testkube", Type: "semgrep", Created: time.Now().Add(-2 * 24 * time.Hour),
+			LastRun: time.Now().Add(-4 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "vulnerability-management", Namespace: "testkube", Type: "defectdojo", Created: time.Now().Add(-1 * 24 * time.Hour),
+			LastRun: time.Now().Add(-12 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "chaos-experiment", Namespace: "testkube", Type: "chaosmesh", Created: time.Now().Add(-20 * 24 * time.Hour),
+			LastRun: time.Now().Add(-3 * 24 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "observability-check", Namespace: "testkube", Type: "signoz", Created: time.Now().Add(-3 * 24 * time.Hour),
+			LastRun: time.Now().Add(-6 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "trace-analysis", Namespace: "testkube", Type: "testtrace", Created: time.Now().Add(-4 * 24 * time.Hour),
+			LastRun: time.Now().Add(-8 * time.Hour), LastStatus: "passed", PassRateLast7d: 98,
+		},
+		{
+			Name: "cost-estimation", Namespace: "testkube", Type: "infracost", Created: time.Now().Add(-2 * 24 * time.Hour),
+			LastRun: time.Now().Add(-1 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "firmware-security", Namespace: "testkube", Type: "emba", Created: time.Now().Add(-10 * 24 * time.Hour),
+			LastRun: time.Now().Add(-48 * time.Hour), LastStatus: "failed", PassRateLast7d: 60,
+		},
+		{
+			Name: "mqtt-load-test", Namespace: "testkube", Type: "emqtt-bench", Created: time.Now().Add(-5 * 24 * time.Hour),
+			LastRun: time.Now().Add(-2 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
+		{
+			Name: "iot-platform-test", Namespace: "testkube", Type: "thingboard", Created: time.Now().Add(-20 * 24 * time.Hour),
+			LastRun: time.Now().Add(-5 * 24 * time.Hour), LastStatus: "passed", PassRateLast7d: 95,
+		},
+		{
+			Name: "cluster-certification", Namespace: "testkube", Type: "kubekert", Created: time.Now().Add(-15 * 24 * time.Hour),
+			LastRun: time.Now().Add(-12 * time.Hour), LastStatus: "passed", PassRateLast7d: 100,
+		},
 	}
 
 	// Generate executions
@@ -31,7 +92,7 @@ func (c *MockClient) generateMockData() {
 			status = "failed"
 		}
 
-		wf := c.workflows[i%3]
+		wf := c.workflows[i%len(c.workflows)]
 
 		c.executions = append(c.executions, Execution{
 			ID:           fmt.Sprintf("exec-%d", i),
