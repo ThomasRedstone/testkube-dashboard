@@ -1,0 +1,5 @@
+# Quick fix - update templates on existing working image
+FROM 534294601285.dkr.ecr.eu-west-2.amazonaws.com/develop/testkube-dashboard:latest
+
+# Copy fixed templates
+COPY web/templates/ /app/web/templates/

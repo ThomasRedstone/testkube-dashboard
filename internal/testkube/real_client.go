@@ -247,6 +247,34 @@ func (c *RealClient) GetWorkflows() ([]Workflow, error) {
 			Created:   item.Created,
 			Type:      extractWorkflowType(item.Spec.Container.Image),
 		}
+
+		// Enrich with execution data
+		executions, err := c.GetExecutions(ListOptions{
+			Workflow: item.Name,
+			PageSize: 10,
+		})
+		if err == nil && len(executions) > 0 {
+			// Get latest execution for LastRun and LastStatus
+			wf.LastRun = executions[0].StartTime
+			wf.LastStatus = executions[0].Status
+
+			// Calculate pass rate for last 7 days
+			sevenDaysAgo := time.Now().AddDate(0, 0, -7)
+			passed := 0
+			total := 0
+			for _, exec := range executions {
+				if exec.StartTime.After(sevenDaysAgo) {
+					total++
+					if exec.Status == "passed" {
+						passed++
+					}
+				}
+			}
+			if total > 0 {
+				wf.PassRateLast7d = (passed * 100) / total
+			}
+		}
+
 		workflows = append(workflows, wf)
 	}
 

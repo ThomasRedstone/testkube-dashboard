@@ -17,7 +17,7 @@
         <tr>
             <td><a href="/workflows/{{.Name}}">{{.Name}}</a></td>
             <td><span class="badge badge-{{.Type}}">{{.Type}}</span></td>
-            <td>{{if .LastRun}}{{.LastRun.Format "2006-01-02 15:04"}}{{else}}-{{end}}</td>
+            <td>{{if not .LastRun.IsZero}}{{.LastRun.Format "2006-01-02 15:04"}}{{else}}-{{end}}</td>
             <td>{{if .LastStatus}}<span class="status status-{{.LastStatus}}">{{.LastStatus}}</span>{{else}}-{{end}}</td>
             <td>{{.PassRateLast7d}}%</td>
             <td>
