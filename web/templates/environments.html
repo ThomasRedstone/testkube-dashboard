@@ -1,0 +1,367 @@
+{{define "content"}}
+<div class="environments-header">
+    <h1>Ephemeral Environments</h1>
+    <button class="btn" onclick="showCreateModal()">Create Environment</button>
+</div>
+
+<div class="environments-grid">
+    {{if .Environments}}
+    {{range .Environments}}
+    <div class="env-card env-{{.Status}}">
+        <div class="env-header">
+            <h3>{{.Name}}</h3>
+            <span class="env-type badge-{{.Type}}">{{.Type}}</span>
+        </div>
+        <div class="env-meta">
+            <div class="meta-row">
+                <span class="label">Owner:</span>
+                <span>{{.Owner}}</span>
+            </div>
+            <div class="meta-row">
+                <span class="label">Status:</span>
+                <span class="status status-{{.Status}}">{{.Status}}</span>
+            </div>
+            <div class="meta-row">
+                <span class="label">Branch:</span>
+                <span>{{if .Branch}}{{.Branch}}{{else}}-{{end}}</span>
+            </div>
+            <div class="meta-row">
+                <span class="label">Expires:</span>
+                <span class="expires-at" data-expires="{{.ExpiresAt.Format "2006-01-02T15:04:05Z07:00"}}">
+                    {{.ExpiresAt.Format "Jan 02 15:04"}}
+                </span>
+            </div>
+        </div>
+        {{if eq .Status "ready"}}
+        <div class="env-url">
+            <a href="{{.URL}}" target="_blank">{{.URL}}</a>
+        </div>
+        {{end}}
+        <div class="env-actions">
+            {{if eq .Status "ready"}}
+            <button class="btn btn-small" onclick="extendEnv('{{.ID}}')">Extend +4h</button>
+            {{end}}
+            <button class="btn btn-small btn-danger" onclick="deleteEnv('{{.ID}}', '{{.Name}}')">Delete</button>
+        </div>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="empty-state">
+        <p>No environments running. Create one to get started!</p>
+    </div>
+    {{end}}
+</div>
+
+<!-- Create Environment Modal -->
+<div id="createModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h2>Create Environment</h2>
+        <form id="createEnvForm" onsubmit="createEnvironment(event)">
+            <div class="form-group">
+                <label for="envName">Name (optional)</label>
+                <input type="text" id="envName" name="name" placeholder="my-feature-test">
+            </div>
+            <div class="form-group">
+                <label for="envOwner">Your Name/Email</label>
+                <input type="text" id="envOwner" name="owner" placeholder="tom@example.com" required>
+            </div>
+            <div class="form-group">
+                <label for="envType">Type</label>
+                <select id="envType" name="type">
+                    <option value="ephemeral">Ephemeral (8 hours)</option>
+                    <option value="sandbox">Dev Sandbox (1 week)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="envBranch">Branch (optional)</label>
+                <input type="text" id="envBranch" name="branch" placeholder="feature/my-feature">
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="hideCreateModal()">Cancel</button>
+                <button type="submit" class="btn">Create</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .environments-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .environments-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 20px;
+    }
+
+    .env-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .env-card.env-creating {
+        border-left: 4px solid #007bff;
+    }
+
+    .env-card.env-ready {
+        border-left: 4px solid #28a745;
+    }
+
+    .env-card.env-failed {
+        border-left: 4px solid #dc3545;
+    }
+
+    .env-card.env-expired {
+        border-left: 4px solid #6c757d;
+        opacity: 0.7;
+    }
+
+    .env-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .env-header h3 {
+        margin: 0;
+        font-size: 1.1em;
+    }
+
+    .env-type {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75em;
+        text-transform: uppercase;
+    }
+
+    .badge-ephemeral {
+        background: #e3f2fd;
+        color: #1976d2;
+    }
+
+    .badge-sandbox {
+        background: #f3e5f5;
+        color: #7b1fa2;
+    }
+
+    .env-meta {
+        margin-bottom: 15px;
+    }
+
+    .meta-row {
+        display: flex;
+        margin-bottom: 5px;
+    }
+
+    .meta-row .label {
+        width: 80px;
+        color: #666;
+        font-size: 0.9em;
+    }
+
+    .env-url {
+        background: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        word-break: break-all;
+    }
+
+    .env-url a {
+        color: #007bff;
+        text-decoration: none;
+    }
+
+    .env-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .btn-small {
+        padding: 6px 12px;
+        font-size: 0.85em;
+    }
+
+    .btn-danger {
+        background: #dc3545;
+    }
+
+    .btn-danger:hover {
+        background: #c82333;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+        grid-column: 1 / -1;
+    }
+
+    /* Modal */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        width: 100%;
+        max-width: 450px;
+    }
+
+    .modal-content h2 {
+        margin-top: 0;
+        margin-bottom: 20px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+    }
+
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 1em;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+    }
+</style>
+
+<script>
+function showCreateModal() {
+    document.getElementById('createModal').style.display = 'flex';
+}
+
+function hideCreateModal() {
+    document.getElementById('createModal').style.display = 'none';
+}
+
+async function createEnvironment(event) {
+    event.preventDefault();
+    const form = event.target;
+    const data = {
+        name: form.name.value,
+        owner: form.owner.value,
+        type: form.type.value,
+        branch: form.branch.value
+    };
+
+    try {
+        const response = await fetch('/api/v1/environments', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            hideCreateModal();
+            location.reload();
+        } else {
+            alert('Failed to create environment');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function deleteEnv(id, name) {
+    if (!confirm(`Delete environment "${name}"?`)) return;
+
+    try {
+        const response = await fetch(`/api/v1/environments/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to delete environment');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function extendEnv(id) {
+    try {
+        const response = await fetch(`/api/v1/environments/${id}/extend`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({hours: 4})
+        });
+
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to extend environment');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+// Update time remaining every minute
+function updateTimeRemaining() {
+    document.querySelectorAll('.expires-at').forEach(el => {
+        const expires = new Date(el.dataset.expires);
+        const now = new Date();
+        const diff = expires - now;
+
+        if (diff <= 0) {
+            el.textContent = 'Expired';
+            el.style.color = '#dc3545';
+        } else {
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            if (hours > 0) {
+                el.textContent = `${hours}h ${mins}m remaining`;
+            } else {
+                el.textContent = `${mins}m remaining`;
+            }
+            if (hours < 1) {
+                el.style.color = '#ff9800';
+            }
+        }
+    });
+}
+
+setInterval(updateTimeRemaining, 60000);
+updateTimeRemaining();
+</script>
+{{end}}

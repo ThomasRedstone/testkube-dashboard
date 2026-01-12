@@ -2,19 +2,23 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/testkube/dashboard/internal/database"
+	"github.com/testkube/dashboard/internal/environments"
 	"github.com/testkube/dashboard/internal/testkube"
 )
 
 type Server struct {
 	api       testkube.Client
 	db        database.Database
+	envMgr    *environments.Manager
 	templates *template.Template
 }
 
@@ -26,6 +30,7 @@ func NewServer(api testkube.Client, db database.Database) *Server {
 	return &Server{
 		api:       api,
 		db:        db,
+		envMgr:    environments.NewManager(),
 		templates: templates,
 	}
 }
@@ -48,6 +53,17 @@ func (s *Server) Router() http.Handler {
 
 	// API routes
 	r.Get("/api/v1/flaky-tests", s.handleFlakyTestsAPI)
+
+	// Environment routes (UI)
+	r.Get("/environments", s.handleEnvironmentList)
+	r.Get("/environments/{id}", s.handleEnvironmentDetail)
+
+	// Environment API routes
+	r.Get("/api/v1/environments", s.handleEnvironmentsAPI)
+	r.Post("/api/v1/environments", s.handleCreateEnvironmentAPI)
+	r.Get("/api/v1/environments/{id}", s.handleGetEnvironmentAPI)
+	r.Delete("/api/v1/environments/{id}", s.handleDeleteEnvironmentAPI)
+	r.Post("/api/v1/environments/{id}/extend", s.handleExtendEnvironmentAPI)
 
 	return r
 }
@@ -259,4 +275,136 @@ func (s *Server) render(w http.ResponseWriter, name string, data interface{}) {
 		log.Printf("Template error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+// Environment handlers
+
+func (s *Server) handleEnvironmentList(w http.ResponseWriter, r *http.Request) {
+	envs := s.envMgr.List(environments.ListEnvironmentsOptions{})
+
+	data := map[string]interface{}{
+		"Environments": envs,
+		"Page":         "environments",
+	}
+
+	s.render(w, "layout", data)
+}
+
+func (s *Server) handleEnvironmentDetail(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	env, err := s.envMgr.Get(id)
+	if err != nil {
+		http.Error(w, "Environment not found", http.StatusNotFound)
+		return
+	}
+
+	// Calculate time remaining
+	timeRemaining := time.Until(env.ExpiresAt)
+
+	data := map[string]interface{}{
+		"Environment":   env,
+		"TimeRemaining": formatDuration(timeRemaining),
+		"Page":          "environments",
+	}
+
+	s.render(w, "layout", data)
+}
+
+func (s *Server) handleEnvironmentsAPI(w http.ResponseWriter, r *http.Request) {
+	owner := r.URL.Query().Get("owner")
+	envs := s.envMgr.List(environments.ListEnvironmentsOptions{
+		Owner: owner,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(envs)
+}
+
+func (s *Server) handleCreateEnvironmentAPI(w http.ResponseWriter, r *http.Request) {
+	var req environments.CreateEnvironmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Set defaults
+	if req.Type == "" {
+		req.Type = environments.TypeEphemeral
+	}
+	if req.Owner == "" {
+		req.Owner = "anonymous"
+	}
+
+	env, err := s.envMgr.Create(r.Context(), req)
+	if err != nil {
+		log.Printf("Failed to create environment: %v", err)
+		http.Error(w, "Failed to create environment", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Created environment %s for %s", env.Name, env.Owner)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(env)
+}
+
+func (s *Server) handleGetEnvironmentAPI(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	env, err := s.envMgr.Get(id)
+	if err != nil {
+		http.Error(w, "Environment not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(env)
+}
+
+func (s *Server) handleDeleteEnvironmentAPI(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	if err := s.envMgr.Delete(id); err != nil {
+		http.Error(w, "Environment not found", http.StatusNotFound)
+		return
+	}
+
+	log.Printf("Deleted environment %s", id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleExtendEnvironmentAPI(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var req struct {
+		Hours int `json:"hours"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req.Hours = 4 // Default extension
+	}
+
+	if err := s.envMgr.Extend(id, req.Hours); err != nil {
+		http.Error(w, "Environment not found", http.StatusNotFound)
+		return
+	}
+
+	env, _ := s.envMgr.Get(id)
+	log.Printf("Extended environment %s by %d hours", id, req.Hours)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(env)
+}
+
+func formatDuration(d time.Duration) string {
+	if d < 0 {
+		return "Expired"
+	}
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
