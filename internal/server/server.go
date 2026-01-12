@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -455,14 +456,24 @@ func formatDuration(d time.Duration) string {
 func (s *Server) handleUserGeneratorPage(w http.ResponseWriter, r *http.Request) {
 	env := r.URL.Query().Get("env")
 	if env == "" {
-		env = "texecomcloud"
+		env = os.Getenv("DATABASE_DEFAULT_SCHEMA")
 	}
 
 	var recentUsers []users.GeneratedUser
 	var environments []users.Environment
 	if s.userGen != nil {
-		recentUsers, _ = s.userGen.ListRecentUsers(20, env)
-		environments, _ = s.userGen.ListEnvironments()
+		var err error
+		environments, err = s.userGen.ListEnvironments()
+		if err != nil {
+			log.Printf("Error listing environments: %v", err)
+		}
+		recentUsers, err = s.userGen.ListRecentUsers(20, env)
+		if err != nil {
+			log.Printf("Error listing users: %v", err)
+		}
+		log.Printf("User Generator: %d environments, %d users in %s", len(environments), len(recentUsers), env)
+	} else {
+		log.Printf("User Generator: not available (userGen is nil)")
 	}
 
 	data := map[string]interface{}{

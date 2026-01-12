@@ -263,16 +263,22 @@ func (g *UserGenerator) ListRecentUsers(limit int, environment string) ([]Genera
 		return nil, fmt.Errorf("no environment specified and DATABASE_DEFAULT_SCHEMA not set")
 	}
 
+	// Get email domain pattern from env, fallback to test.local
+	emailDomain := os.Getenv("TEST_USER_EMAIL_DOMAIN")
+	if emailDomain == "" {
+		emailDomain = "test.local"
+	}
+
 	query := fmt.Sprintf(`
-		SELECT u.user_name, u.user_email, u.user_type, g.user_group_name, u.created_at
+		SELECT u.user_name, u.user_email, u.user_type, g.user_group_name
 		FROM %s.users u
 		LEFT JOIN %s.user_groups g ON u.user_group_id = g.user_group_id
-		WHERE u.user_email LIKE '%%test%%' OR u.user_email LIKE '%%texecom.local'
-		ORDER BY u.created_at DESC
+		WHERE u.user_email LIKE ? OR u.user_email LIKE ?
+		ORDER BY u.user_id DESC
 		LIMIT ?
 	`, schema, schema)
 
-	rows, err := g.db.Query(query, limit)
+	rows, err := g.db.Query(query, "%test%", "%"+emailDomain, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
@@ -281,13 +287,9 @@ func (g *UserGenerator) ListRecentUsers(limit int, environment string) ([]Genera
 	var users []GeneratedUser
 	for rows.Next() {
 		var u GeneratedUser
-		var createdAt sql.NullTime
 		var groupName sql.NullString
-		if err := rows.Scan(&u.Username, &u.Email, &u.UserType, &groupName, &createdAt); err != nil {
+		if err := rows.Scan(&u.Username, &u.Email, &u.UserType, &groupName); err != nil {
 			continue
-		}
-		if createdAt.Valid {
-			u.CreatedAt = createdAt.Time
 		}
 		if groupName.Valid {
 			u.GroupName = groupName.String
