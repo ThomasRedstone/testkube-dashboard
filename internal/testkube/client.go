@@ -47,4 +47,5 @@ type Client interface {
 	GetWorkflows() ([]Workflow, error)
 	GetArtifacts(executionID string) ([]Artifact, error)
 	DownloadArtifact(executionID, path string) ([]byte, error)
+	ExecuteWorkflow(workflowID string) error
 }

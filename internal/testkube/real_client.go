@@ -1,6 +1,7 @@
 package testkube
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -352,6 +353,35 @@ func (c *RealClient) DownloadArtifact(executionID, path string) ([]byte, error) 
 	}
 
 	return data, nil
+}
+
+func (c *RealClient) ExecuteWorkflow(workflowID string) error {
+	// API Endpoint: POST /v1/test-workflows/{id}/executions
+	apiURL := fmt.Sprintf("%s/v1/test-workflows/%s/executions", c.baseURL, workflowID)
+
+	// Create request with empty body (or default config)
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer([]byte("{}")))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }
 
 // Helper function to extract workflow type from container image

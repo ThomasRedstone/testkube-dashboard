@@ -158,3 +158,8 @@ func (c *MockClient) DownloadArtifact(executionID, path string) ([]byte, error) 
 	// Return empty bytes for now, or a minimal valid zip if needed
 	return []byte{}, nil
 }
+
+func (c *MockClient) ExecuteWorkflow(workflowID string) error {
+	// Mock successful execution start
+	return nil
+}
