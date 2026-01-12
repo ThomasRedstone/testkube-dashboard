@@ -147,6 +147,41 @@ func (c *MockClient) GetWorkflows() ([]Workflow, error) {
 	return c.workflows, nil
 }
 
+func (c *MockClient) GetWorkflow(name string) (*Workflow, error) {
+	for _, wf := range c.workflows {
+		if wf.Name == name {
+			return &wf, nil
+		}
+	}
+	return nil, fmt.Errorf("workflow not found: %s", name)
+}
+
+func (c *MockClient) RunWorkflow(name string) (*Execution, error) {
+	// Find the workflow
+	var workflow *Workflow
+	for _, wf := range c.workflows {
+		if wf.Name == name {
+			workflow = &wf
+			break
+		}
+	}
+	if workflow == nil {
+		return nil, fmt.Errorf("workflow not found: %s", name)
+	}
+
+	// Create a new execution
+	exec := &Execution{
+		ID:           fmt.Sprintf("exec-%d", len(c.executions)+1),
+		Name:         fmt.Sprintf("%s-%d", name, len(c.executions)+1),
+		WorkflowName: name,
+		Status:       "queued",
+		StartTime:    time.Now(),
+	}
+	c.executions = append([]Execution{*exec}, c.executions...)
+
+	return exec, nil
+}
+
 func (c *MockClient) GetArtifacts(executionID string) ([]Artifact, error) {
 	return []Artifact{
 		{Name: "playwright-report.zip", Size: 1024 * 1024, Path: "playwright-report.zip"},

@@ -45,6 +45,8 @@ type Client interface {
 	GetExecutions(opts ListOptions) ([]Execution, error)
 	GetExecution(id string) (*Execution, error)
 	GetWorkflows() ([]Workflow, error)
+	GetWorkflow(name string) (*Workflow, error)
 	GetArtifacts(executionID string) ([]Artifact, error)
 	DownloadArtifact(executionID, path string) ([]byte, error)
+	RunWorkflow(name string) (*Execution, error)
 }

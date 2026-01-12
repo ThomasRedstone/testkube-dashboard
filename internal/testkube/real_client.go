@@ -354,6 +354,108 @@ func (c *RealClient) DownloadArtifact(executionID, path string) ([]byte, error) 
 	return data, nil
 }
 
+func (c *RealClient) GetWorkflow(name string) (*Workflow, error) {
+	apiURL := fmt.Sprintf("%s/v1/test-workflows/%s", c.baseURL, name)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.token != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("workflow %s not found", name)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned %d", resp.StatusCode)
+	}
+
+	var apiResponse struct {
+		Name      string    `json:"name"`
+		Namespace string    `json:"namespace"`
+		Created   time.Time `json:"created"`
+		Spec      struct {
+			Container struct {
+				Image string `json:"image"`
+			} `json:"container"`
+		} `json:"spec"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	wf := &Workflow{
+		Name:      apiResponse.Name,
+		Namespace: apiResponse.Namespace,
+		Created:   apiResponse.Created,
+		Type:      extractWorkflowType(apiResponse.Spec.Container.Image),
+	}
+
+	return wf, nil
+}
+
+func (c *RealClient) RunWorkflow(name string) (*Execution, error) {
+	apiURL := fmt.Sprintf("%s/v1/test-workflows/%s/executions", c.baseURL, name)
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader("{}"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var apiResponse struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Number int    `json:"number"`
+		Workflow struct {
+			Name string `json:"name"`
+		} `json:"workflow"`
+		Result struct {
+			Status    string    `json:"status"`
+			StartTime time.Time `json:"startTime"`
+			EndTime   time.Time `json:"endTime"`
+		} `json:"result"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	exec := &Execution{
+		ID:           apiResponse.ID,
+		Name:         apiResponse.Name,
+		WorkflowName: apiResponse.Workflow.Name,
+		Status:       apiResponse.Result.Status,
+		StartTime:    apiResponse.Result.StartTime,
+		EndTime:      apiResponse.Result.EndTime,
+	}
+
+	return exec, nil
+}
+
 // Helper function to extract workflow type from container image
 func extractWorkflowType(image string) string {
 	lowerImage := strings.ToLower(image)
