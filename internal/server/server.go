@@ -13,12 +13,14 @@ import (
 	"github.com/testkube/dashboard/internal/database"
 	"github.com/testkube/dashboard/internal/environments"
 	"github.com/testkube/dashboard/internal/testkube"
+	"github.com/testkube/dashboard/internal/users"
 )
 
 type Server struct {
 	api       testkube.Client
 	db        database.Database
 	envMgr    *environments.Manager
+	userGen   *users.UserGenerator
 	templates *template.Template
 }
 
@@ -27,10 +29,17 @@ func NewServer(api testkube.Client, db database.Database) *Server {
 	templatesDir := "web/templates"
 	templates := template.Must(template.ParseGlob(filepath.Join(templatesDir, "*.html")))
 
+	// Initialize user generator (may fail if DB not configured)
+	userGen, err := users.NewUserGenerator()
+	if err != nil {
+		log.Printf("Warning: User generator not available: %v", err)
+	}
+
 	return &Server{
 		api:       api,
 		db:        db,
 		envMgr:    environments.NewManager(),
+		userGen:   userGen,
 		templates: templates,
 	}
 }
@@ -64,6 +73,12 @@ func (s *Server) Router() http.Handler {
 	r.Get("/api/v1/environments/{id}", s.handleGetEnvironmentAPI)
 	r.Delete("/api/v1/environments/{id}", s.handleDeleteEnvironmentAPI)
 	r.Post("/api/v1/environments/{id}/extend", s.handleExtendEnvironmentAPI)
+
+	// Tools routes
+	r.Get("/tools/user-generator", s.handleUserGeneratorPage)
+	r.Get("/api/v1/users", s.handleListUsersAPI)
+	r.Post("/api/v1/users", s.handleCreateUserAPI)
+	r.Delete("/api/v1/users/{username}", s.handleDeleteUserAPI)
 
 	return r
 }
@@ -407,4 +422,81 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	}
 	return fmt.Sprintf("%dm", minutes)
+}
+
+// User Generator handlers
+
+func (s *Server) handleUserGeneratorPage(w http.ResponseWriter, r *http.Request) {
+	var recentUsers []users.GeneratedUser
+	if s.userGen != nil {
+		recentUsers, _ = s.userGen.ListRecentUsers(20)
+	}
+
+	data := map[string]interface{}{
+		"Page":        "tools",
+		"RecentUsers": recentUsers,
+		"DBAvailable": s.userGen != nil,
+	}
+
+	s.render(w, "layout", data)
+}
+
+func (s *Server) handleListUsersAPI(w http.ResponseWriter, r *http.Request) {
+	if s.userGen == nil {
+		http.Error(w, "Database not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	users, err := s.userGen.ListRecentUsers(50)
+	if err != nil {
+		log.Printf("Error listing users: %v", err)
+		http.Error(w, "Failed to list users", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
+
+func (s *Server) handleCreateUserAPI(w http.ResponseWriter, r *http.Request) {
+	if s.userGen == nil {
+		http.Error(w, "Database not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req users.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.userGen.CreateUser(req)
+	if err != nil {
+		log.Printf("Error creating user: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to create user: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Created user: %s (%s)", user.Username, user.Email)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(user)
+}
+
+func (s *Server) handleDeleteUserAPI(w http.ResponseWriter, r *http.Request) {
+	if s.userGen == nil {
+		http.Error(w, "Database not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	username := chi.URLParam(r, "username")
+	if err := s.userGen.DeleteUser(username); err != nil {
+		log.Printf("Error deleting user: %v", err)
+		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Deleted user: %s", username)
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -1,0 +1,396 @@
+{{define "content"}}
+<div class="tool-header">
+    <h1>User Account Generator</h1>
+    <p class="subtitle">Create test accounts for Texecom Cloud</p>
+</div>
+
+{{if not .DBAvailable}}
+<div class="alert alert-warning">
+    Database connection not configured. User generation is not available.
+</div>
+{{else}}
+
+<div class="generator-layout">
+    <div class="generator-form-section">
+        <h2>Create New User</h2>
+        <form id="createUserForm" onsubmit="createUser(event)">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Leave empty for auto-generated">
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" placeholder="Leave empty for auto-generated">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="text" id="password" name="password" placeholder="Leave empty for auto-generated">
+            </div>
+            <div class="form-group">
+                <label for="userType">User Type</label>
+                <select id="userType" name="userType">
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                    <option value="systemadmin">System Admin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="groupName">Group</label>
+                <input type="text" id="groupName" name="groupName" placeholder="Test Users (default)">
+            </div>
+            <button type="submit" class="btn btn-primary">Generate User</button>
+        </form>
+
+        <div id="generatedUser" class="generated-result" style="display: none;">
+            <h3>User Created!</h3>
+            <div class="credentials-box">
+                <div class="credential-row">
+                    <span class="label">Username:</span>
+                    <span id="genUsername" class="value"></span>
+                    <button class="btn-copy" onclick="copyToClipboard('genUsername')">Copy</button>
+                </div>
+                <div class="credential-row">
+                    <span class="label">Email:</span>
+                    <span id="genEmail" class="value"></span>
+                    <button class="btn-copy" onclick="copyToClipboard('genEmail')">Copy</button>
+                </div>
+                <div class="credential-row">
+                    <span class="label">Password:</span>
+                    <span id="genPassword" class="value password"></span>
+                    <button class="btn-copy" onclick="copyToClipboard('genPassword')">Copy</button>
+                </div>
+                <div class="credential-row">
+                    <span class="label">Type:</span>
+                    <span id="genType" class="value"></span>
+                </div>
+            </div>
+            <button class="btn btn-secondary" onclick="copyAllCredentials()">Copy All</button>
+        </div>
+    </div>
+
+    <div class="recent-users-section">
+        <h2>Recent Test Users</h2>
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Type</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody">
+            {{range .RecentUsers}}
+                <tr>
+                    <td>{{.Username}}</td>
+                    <td>{{.Email}}</td>
+                    <td><span class="badge badge-{{.UserType}}">{{.UserType}}</span></td>
+                    <td>{{.CreatedAt.Format "Jan 02 15:04"}}</td>
+                    <td>
+                        <button class="btn-small btn-danger" onclick="deleteUser('{{.Username}}')">Delete</button>
+                    </td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="5" class="empty-state">No test users found</td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}
+
+<style>
+    .tool-header {
+        margin-bottom: 30px;
+    }
+
+    .tool-header h1 {
+        margin-bottom: 5px;
+    }
+
+    .subtitle {
+        color: #666;
+        font-size: 1.1em;
+    }
+
+    .alert {
+        padding: 15px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .alert-warning {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        color: #856404;
+    }
+
+    .generator-layout {
+        display: grid;
+        grid-template-columns: 1fr 1.5fr;
+        gap: 30px;
+    }
+
+    @media (max-width: 1000px) {
+        .generator-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .generator-form-section {
+        background: white;
+        padding: 25px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .generator-form-section h2 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+        border-bottom: none;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #333;
+    }
+
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 1em;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+        border-color: #007bff;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(0,123,255,0.1);
+    }
+
+    .btn-primary {
+        width: 100%;
+        padding: 12px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 1em;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+
+    .btn-primary:hover {
+        background: #0056b3;
+    }
+
+    .generated-result {
+        margin-top: 25px;
+        padding-top: 25px;
+        border-top: 1px solid #eee;
+    }
+
+    .generated-result h3 {
+        color: #28a745;
+        margin-bottom: 15px;
+    }
+
+    .credentials-box {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+
+    .credential-row {
+        display: flex;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .credential-row:last-child {
+        border-bottom: none;
+    }
+
+    .credential-row .label {
+        width: 100px;
+        font-weight: 500;
+        color: #666;
+    }
+
+    .credential-row .value {
+        flex-grow: 1;
+        font-family: monospace;
+        background: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+    }
+
+    .credential-row .password {
+        color: #dc3545;
+        font-weight: bold;
+    }
+
+    .btn-copy {
+        padding: 5px 10px;
+        background: #e9ecef;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.85em;
+        margin-left: 10px;
+    }
+
+    .btn-copy:hover {
+        background: #dee2e6;
+    }
+
+    .btn-secondary {
+        width: 100%;
+        padding: 10px;
+        background: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .recent-users-section {
+        background: white;
+        padding: 25px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .recent-users-section h2 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-size: 1.3em;
+        border-bottom: none;
+    }
+
+    .users-table {
+        width: 100%;
+        margin-top: 0;
+    }
+
+    .badge-user { background: #e3f2fd; color: #1976d2; }
+    .badge-admin { background: #fff3e0; color: #e65100; }
+    .badge-systemadmin { background: #fce4ec; color: #c2185b; }
+
+    .btn-small {
+        padding: 4px 8px;
+        font-size: 0.8em;
+    }
+
+    .empty-state {
+        text-align: center;
+        color: #999;
+        padding: 20px;
+    }
+</style>
+
+<script>
+let lastCreatedUser = null;
+
+async function createUser(event) {
+    event.preventDefault();
+    const form = event.target;
+
+    const data = {
+        username: form.username.value || undefined,
+        email: form.email.value || undefined,
+        password: form.password.value || undefined,
+        userType: form.userType.value,
+        groupName: form.groupName.value || undefined
+    };
+
+    try {
+        const response = await fetch('/api/v1/users', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err);
+        }
+
+        const user = await response.json();
+        lastCreatedUser = user;
+
+        // Display the generated user
+        document.getElementById('genUsername').textContent = user.username;
+        document.getElementById('genEmail').textContent = user.email;
+        document.getElementById('genPassword').textContent = user.password;
+        document.getElementById('genType').textContent = user.userType;
+        document.getElementById('generatedUser').style.display = 'block';
+
+        // Clear form
+        form.reset();
+
+        // Reload user list
+        location.reload();
+    } catch (err) {
+        alert('Error creating user: ' + err.message);
+    }
+}
+
+async function deleteUser(username) {
+    if (!confirm(`Delete user "${username}"?`)) return;
+
+    try {
+        const response = await fetch(`/api/v1/users/${encodeURIComponent(username)}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to delete user');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function copyToClipboard(elementId) {
+    const text = document.getElementById(elementId).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        // Brief visual feedback
+        const btn = event.target;
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = original, 1000);
+    });
+}
+
+function copyAllCredentials() {
+    if (!lastCreatedUser) return;
+
+    const text = `Username: ${lastCreatedUser.username}
+Email: ${lastCreatedUser.email}
+Password: ${lastCreatedUser.password}
+Type: ${lastCreatedUser.userType}`;
+
+    navigator.clipboard.writeText(text).then(() => {
+        alert('Credentials copied to clipboard!');
+    });
+}
+</script>
+{{end}}
