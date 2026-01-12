@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="tool-header">
     <h1>User Account Generator</h1>
-    <p class="subtitle">Create test accounts for Texecom Cloud</p>
+    <p class="subtitle">Create test accounts for configured environments</p>
 </div>
 
 {{if not .DBAvailable}}
@@ -9,6 +9,16 @@
     Database connection not configured. User generation is not available.
 </div>
 {{else}}
+
+<div class="env-selector">
+    <label for="envSelect">Environment:</label>
+    <select id="envSelect" onchange="changeEnvironment(this.value)">
+        {{range .Environments}}
+        <option value="{{.Schema}}" {{if eq .Schema $.CurrentEnv}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+    </select>
+    <span class="env-desc">Select which database schema to create users in</span>
+</div>
 
 <div class="generator-layout">
     <div class="generator-form-section">
@@ -45,6 +55,10 @@
             <h3>User Created!</h3>
             <div class="credentials-box">
                 <div class="credential-row">
+                    <span class="label">Environment:</span>
+                    <span id="genEnv" class="value"></span>
+                </div>
+                <div class="credential-row">
                     <span class="label">Username:</span>
                     <span id="genUsername" class="value"></span>
                     <button class="btn-copy" onclick="copyToClipboard('genUsername')">Copy</button>
@@ -69,7 +83,7 @@
     </div>
 
     <div class="recent-users-section">
-        <h2>Recent Test Users</h2>
+        <h2>Recent Test Users in <span class="env-name">{{.CurrentEnv}}</span></h2>
         <table class="users-table">
             <thead>
                 <tr>
@@ -93,7 +107,7 @@
                 </tr>
             {{else}}
                 <tr>
-                    <td colspan="5" class="empty-state">No test users found</td>
+                    <td colspan="5" class="empty-state">No test users found in this environment</td>
                 </tr>
             {{end}}
             </tbody>
@@ -104,7 +118,7 @@
 
 <style>
     .tool-header {
-        margin-bottom: 30px;
+        margin-bottom: 20px;
     }
 
     .tool-header h1 {
@@ -114,6 +128,41 @@
     .subtitle {
         color: #666;
         font-size: 1.1em;
+    }
+
+    .env-selector {
+        background: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .env-selector label {
+        font-weight: 600;
+        color: #333;
+    }
+
+    .env-selector select {
+        padding: 8px 12px;
+        border: 2px solid #007bff;
+        border-radius: 4px;
+        font-size: 1em;
+        background: white;
+        min-width: 200px;
+    }
+
+    .env-selector .env-desc {
+        color: #666;
+        font-size: 0.9em;
+    }
+
+    .env-name {
+        color: #007bff;
+        font-weight: 600;
     }
 
     .alert {
@@ -297,6 +346,18 @@
         font-size: 0.8em;
     }
 
+    .btn-danger {
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .btn-danger:hover {
+        background: #c82333;
+    }
+
     .empty-state {
         text-align: center;
         color: #999;
@@ -306,6 +367,11 @@
 
 <script>
 let lastCreatedUser = null;
+let currentEnv = '{{.CurrentEnv}}';
+
+function changeEnvironment(env) {
+    window.location.href = '/tools/user-generator?env=' + encodeURIComponent(env);
+}
 
 async function createUser(event) {
     event.preventDefault();
@@ -316,7 +382,8 @@ async function createUser(event) {
         email: form.email.value || undefined,
         password: form.password.value || undefined,
         userType: form.userType.value,
-        groupName: form.groupName.value || undefined
+        groupName: form.groupName.value || undefined,
+        environment: currentEnv
     };
 
     try {
@@ -335,6 +402,7 @@ async function createUser(event) {
         lastCreatedUser = user;
 
         // Display the generated user
+        document.getElementById('genEnv').textContent = user.environment;
         document.getElementById('genUsername').textContent = user.username;
         document.getElementById('genEmail').textContent = user.email;
         document.getElementById('genPassword').textContent = user.password;
@@ -344,18 +412,18 @@ async function createUser(event) {
         // Clear form
         form.reset();
 
-        // Reload user list
-        location.reload();
+        // Reload user list after a short delay to show credentials
+        setTimeout(() => location.reload(), 2000);
     } catch (err) {
         alert('Error creating user: ' + err.message);
     }
 }
 
 async function deleteUser(username) {
-    if (!confirm(`Delete user "${username}"?`)) return;
+    if (!confirm(`Delete user "${username}" from ${currentEnv}?`)) return;
 
     try {
-        const response = await fetch(`/api/v1/users/${encodeURIComponent(username)}`, {
+        const response = await fetch(`/api/v1/users/${encodeURIComponent(username)}?env=${encodeURIComponent(currentEnv)}`, {
             method: 'DELETE'
         });
 
@@ -383,7 +451,8 @@ function copyToClipboard(elementId) {
 function copyAllCredentials() {
     if (!lastCreatedUser) return;
 
-    const text = `Username: ${lastCreatedUser.username}
+    const text = `Environment: ${lastCreatedUser.environment}
+Username: ${lastCreatedUser.username}
 Email: ${lastCreatedUser.email}
 Password: ${lastCreatedUser.password}
 Type: ${lastCreatedUser.userType}`;

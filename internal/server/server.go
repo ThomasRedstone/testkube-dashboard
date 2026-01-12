@@ -98,6 +98,7 @@ func (s *Server) Router() http.Handler {
 	r.Get("/api/v1/users", s.handleListUsersAPI)
 	r.Post("/api/v1/users", s.handleCreateUserAPI)
 	r.Delete("/api/v1/users/{username}", s.handleDeleteUserAPI)
+	r.Get("/api/v1/user-environments", s.handleListUserEnvironmentsAPI)
 
 	return r
 }
@@ -452,15 +453,24 @@ func formatDuration(d time.Duration) string {
 // User Generator handlers
 
 func (s *Server) handleUserGeneratorPage(w http.ResponseWriter, r *http.Request) {
+	env := r.URL.Query().Get("env")
+	if env == "" {
+		env = "texecomcloud"
+	}
+
 	var recentUsers []users.GeneratedUser
+	var environments []users.Environment
 	if s.userGen != nil {
-		recentUsers, _ = s.userGen.ListRecentUsers(20)
+		recentUsers, _ = s.userGen.ListRecentUsers(20, env)
+		environments, _ = s.userGen.ListEnvironments()
 	}
 
 	data := map[string]interface{}{
-		"Page":        "tools",
-		"RecentUsers": recentUsers,
-		"DBAvailable": s.userGen != nil,
+		"Page":            "tools",
+		"RecentUsers":     recentUsers,
+		"Environments":    environments,
+		"CurrentEnv":      env,
+		"DBAvailable":     s.userGen != nil,
 	}
 
 	s.render(w, "user_generator.html", data)
@@ -472,7 +482,8 @@ func (s *Server) handleListUsersAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	users, err := s.userGen.ListRecentUsers(50)
+	env := r.URL.Query().Get("env")
+	userList, err := s.userGen.ListRecentUsers(50, env)
 	if err != nil {
 		log.Printf("Error listing users: %v", err)
 		http.Error(w, "Failed to list users", http.StatusInternalServerError)
@@ -480,7 +491,24 @@ func (s *Server) handleListUsersAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(users)
+	json.NewEncoder(w).Encode(userList)
+}
+
+func (s *Server) handleListUserEnvironmentsAPI(w http.ResponseWriter, r *http.Request) {
+	if s.userGen == nil {
+		http.Error(w, "Database not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	envs, err := s.userGen.ListEnvironments()
+	if err != nil {
+		log.Printf("Error listing environments: %v", err)
+		http.Error(w, "Failed to list environments", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(envs)
 }
 
 func (s *Server) handleCreateUserAPI(w http.ResponseWriter, r *http.Request) {
@@ -502,7 +530,7 @@ func (s *Server) handleCreateUserAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Created user: %s (%s)", user.Username, user.Email)
+	log.Printf("Created user: %s (%s) in %s", user.Username, user.Email, user.Environment)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -516,7 +544,8 @@ func (s *Server) handleDeleteUserAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := chi.URLParam(r, "username")
-	if err := s.userGen.DeleteUser(username); err != nil {
+	env := r.URL.Query().Get("env")
+	if err := s.userGen.DeleteUser(username, env); err != nil {
 		log.Printf("Error deleting user: %v", err)
 		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
 		return
