@@ -75,12 +75,12 @@ func (c *RealClient) GetExecutions(opts ListOptions) ([]Execution, error) {
 	if opts.Status != "" {
 		params.Set("status", opts.Status)
 	}
-	if opts.Workflow != "" {
-		params.Set("selector", fmt.Sprintf("testworkflow=%s", opts.Workflow))
-	}
 
 	// Make API request
 	apiURL := fmt.Sprintf("%s/v1/test-workflow-executions?%s", c.baseURL, params.Encode())
+	if opts.Workflow != "" {
+		apiURL = fmt.Sprintf("%s/v1/test-workflows/%s/executions?%s", c.baseURL, opts.Workflow, params.Encode())
+	}
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -454,6 +454,35 @@ func (c *RealClient) RunWorkflow(name string) (*Execution, error) {
 	}
 
 	return exec, nil
+}
+
+func (c *RealClient) GetExecutionLogs(executionID string) (string, error) {
+	apiURL := fmt.Sprintf("%s/v1/test-workflow-executions/%s/logs", c.baseURL, executionID)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.token != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	return string(data), nil
 }
 
 // Helper function to extract workflow type from container image

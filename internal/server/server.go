@@ -23,11 +23,12 @@ type Server struct {
 	envMgr    *environments.Manager
 	userGen   *users.UserGenerator
 	templates map[string]*template.Template
+	rootDir   string
 }
 
-func NewServer(api testkube.Client, db database.Database) *Server {
+func NewServer(api testkube.Client, db database.Database, userGen *users.UserGenerator, rootDir string) *Server {
 	// Load templates - each page needs its own template that includes layout
-	templatesDir := "web/templates"
+	templatesDir := filepath.Join(rootDir, "web/templates")
 	templates := make(map[string]*template.Template)
 
 	// List of page templates (each defines "content")
@@ -39,6 +40,7 @@ func NewServer(api testkube.Client, db database.Database) *Server {
 		"environments.html",
 		"user_generator.html",
 		"k6_report.html",
+		"workflow_history.html",
 	}
 
 	layoutPath := filepath.Join(templatesDir, "layout.html")
@@ -49,18 +51,13 @@ func NewServer(api testkube.Client, db database.Database) *Server {
 		templates[page] = t
 	}
 
-	// Initialize user generator (may fail if DB not configured)
-	userGen, err := users.NewUserGenerator()
-	if err != nil {
-		log.Printf("Warning: User generator not available: %v", err)
-	}
-
 	return &Server{
 		api:       api,
 		db:        db,
 		envMgr:    environments.NewManager(),
 		userGen:   userGen,
 		templates: templates,
+		rootDir:   rootDir,
 	}
 }
 
@@ -68,7 +65,7 @@ func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 
 	// Static files
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir(filepath.Join(s.rootDir, "web/static")))))
 
 	// Main routes
 	r.Get("/", s.handleDashboard)
@@ -136,6 +133,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		"RecentFailures": executions,
 		"PassRateChart":  template.HTML(""),
 		"DurationChart":  template.HTML(""),
+		"Error":          nil,
 	}
 
 	if trends != nil {
@@ -143,6 +141,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		data["PassRateTrend"] = trends.PassRateChange
 		data["AvgDuration"] = trends.AvgDuration.String()
 		data["DurationTrend"] = trends.DurationChange
+	} else if err != nil {
+		data["Error"] = fmt.Sprintf("Could not load trend data: %v", err)
 	}
 
 	s.render(w, "dashboard.html", data)
@@ -221,19 +221,14 @@ func (s *Server) handleWorkflowHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return just the table rows for HTMX partial
-	for _, exec := range executions {
-		w.Write([]byte(`<tr>
-			<td><a href="/executions/` + exec.ID + `">` + exec.Name + `</a></td>
-			<td><span class="status status-` + exec.Status + `">` + exec.Status + `</span></td>
-			<td>` + exec.StartTime.Format("2006-01-02 15:04") + `</td>
-			<td>` + exec.Duration.String() + `</td>
-			<td>` + exec.Branch + `</td>
-			<td>
-				<a href="/executions/` + exec.ID + `" class="btn-secondary">Details</a>
-			</td>
-		</tr>`))
+	log.Printf("Found %d executions for workflow %s", len(executions), name)
+
+	data := map[string]interface{}{
+		"Name":       name,
+		"Executions": executions,
 	}
+
+	s.render(w, "workflow_history.html", data)
 }
 
 func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
@@ -262,7 +257,6 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleExecutionReport(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	// Try to get the Playwright report artifact
 	artifacts, err := s.api.GetArtifacts(id)
 	if err != nil {
 		log.Printf("Error getting artifacts: %v", err)
@@ -270,27 +264,42 @@ func (s *Server) handleExecutionReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look for HTML report
+	// Look for HTML report, prefer playwright
+	var reportPath string
 	for _, artifact := range artifacts {
+		if artifact.Name == "playwright-report/index.html" {
+			reportPath = artifact.Path
+			break
+		}
 		if filepath.Ext(artifact.Name) == ".html" {
-			data, err := s.api.DownloadArtifact(id, artifact.Path)
-			if err != nil {
-				log.Printf("Error downloading artifact: %v", err)
-				continue
-			}
-			w.Header().Set("Content-Type", "text/html")
-			w.Write(data)
+			reportPath = artifact.Path
+		}
+	}
+
+	if reportPath != "" {
+		data, err := s.api.DownloadArtifact(id, reportPath)
+		if err != nil {
+			log.Printf("Error downloading artifact %s: %v", reportPath, err)
+			http.Error(w, "Failed to download report", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write(data)
+		return
 	}
 
 	http.Error(w, "No HTML report found", http.StatusNotFound)
 }
 
 func (s *Server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
-	// id := chi.URLParam(r, "id")
-	// For now, return placeholder logs
-	w.Write([]byte("Logs not yet implemented"))
+	id := chi.URLParam(r, "id")
+	logs, err := s.api.GetExecutionLogs(id)
+	if err != nil {
+		log.Printf("Error getting execution logs: %v", err)
+		http.Error(w, "Failed to load logs", http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte(logs))
 }
 
 func (s *Server) handleFlakyTestsAPI(w http.ResponseWriter, r *http.Request) {
