@@ -1,4 +1,9 @@
 {{define "content"}}
+{{if .Error}}
+<div class="error" style="background-color: #f8d7da; color: #721c24; padding: 1rem; border: 1px solid #f5c6cb; border-radius: .25rem; margin-bottom: 1rem;">
+    {{.Error}}
+</div>
+{{end}}
 <div class="dashboard-grid">
     <div class="metric-card">
         <h3>Pass Rate</h3>

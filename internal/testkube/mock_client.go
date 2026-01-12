@@ -193,3 +193,7 @@ func (c *MockClient) DownloadArtifact(executionID, path string) ([]byte, error) 
 	// Return empty bytes for now, or a minimal valid zip if needed
 	return []byte{}, nil
 }
+
+func (c *MockClient) GetExecutionLogs(executionID string) (string, error) {
+	return "Mock logs for execution " + executionID, nil
+}

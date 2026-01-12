@@ -1,0 +1,30 @@
+{{define "content"}}
+<h2>Execution History for {{.Name}}</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Execution</th>
+            <th>Status</th>
+            <th>When</th>
+            <th>Duration</th>
+            <th>Branch</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Executions}}
+        <tr>
+            <td><a href="/executions/{{.ID}}">{{.Name}}</a></td>
+            <td><span class="status status-{{.Status}}">{{.Status}}</span></td>
+            <td>{{.StartTime.Format "Jan 02 15:04"}}</td>
+            <td>{{.Duration}}</td>
+            <td>{{.Branch}}</td>
+            <td>
+                <a href="/executions/{{.ID}}" class="btn-secondary">Details</a>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}

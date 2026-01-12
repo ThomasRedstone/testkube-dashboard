@@ -8,6 +8,7 @@ import (
 	"github.com/testkube/dashboard/internal/database"
 	"github.com/testkube/dashboard/internal/server"
 	"github.com/testkube/dashboard/internal/testkube"
+	"github.com/testkube/dashboard/internal/users"
 )
 
 func main() {
@@ -38,7 +39,21 @@ func main() {
 	// Database still uses mock for Phase 2 (PostgreSQL comes in Phase 3)
 	db := database.NewMockDatabase()
 
-	srv := server.NewServer(api, db)
+	var userGen *users.UserGenerator
+	if os.Getenv("DATABASE_URL") != "" {
+		var err error
+		userGen, err = users.NewUserGenerator()
+		if err != nil {
+			log.Printf("Warning: User generator not available: %v", err)
+		}
+	}
+
+	rootDir, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	srv := server.NewServer(api, db, userGen, rootDir)
 
 	port := ":8080"
 	log.Printf("Starting Testkube Dashboard on %s", port)
