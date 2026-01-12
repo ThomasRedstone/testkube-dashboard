@@ -21,13 +21,32 @@ type Server struct {
 	db        database.Database
 	envMgr    *environments.Manager
 	userGen   *users.UserGenerator
-	templates *template.Template
+	templates map[string]*template.Template
 }
 
 func NewServer(api testkube.Client, db database.Database) *Server {
-	// Load templates
+	// Load templates - each page needs its own template that includes layout
 	templatesDir := "web/templates"
-	templates := template.Must(template.ParseGlob(filepath.Join(templatesDir, "*.html")))
+	templates := make(map[string]*template.Template)
+
+	// List of page templates (each defines "content")
+	pages := []string{
+		"dashboard.html",
+		"workflow_list.html",
+		"workflow_detail.html",
+		"execution_detail.html",
+		"environments.html",
+		"user_generator.html",
+		"k6_report.html",
+	}
+
+	layoutPath := filepath.Join(templatesDir, "layout.html")
+	for _, page := range pages {
+		pagePath := filepath.Join(templatesDir, page)
+		// Parse layout first, then the page template
+		t := template.Must(template.ParseFiles(layoutPath, pagePath))
+		templates[page] = t
+	}
 
 	// Initialize user generator (may fail if DB not configured)
 	userGen, err := users.NewUserGenerator()
@@ -124,7 +143,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		data["DurationTrend"] = trends.DurationChange
 	}
 
-	s.render(w, "layout", data)
+	s.render(w, "dashboard.html", data)
 }
 
 func (s *Server) handleWorkflowList(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +158,7 @@ func (s *Server) handleWorkflowList(w http.ResponseWriter, r *http.Request) {
 		"Workflows": workflows,
 	}
 
-	s.render(w, "layout", data)
+	s.render(w, "workflow_list.html", data)
 }
 
 func (s *Server) handleWorkflowDetail(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +185,7 @@ func (s *Server) handleWorkflowDetail(w http.ResponseWriter, r *http.Request) {
 		"PassRateChart": template.HTML(""),
 	}
 
-	s.render(w, "layout", data)
+	s.render(w, "workflow_detail.html", data)
 }
 
 func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +254,7 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 		"TestCases": testCases,
 	}
 
-	s.render(w, "layout", data)
+	s.render(w, "execution_detail.html", data)
 }
 
 func (s *Server) handleExecutionReport(w http.ResponseWriter, r *http.Request) {
@@ -284,9 +303,15 @@ func (s *Server) handleFlakyTestsAPI(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(flakyTests)
 }
 
-func (s *Server) render(w http.ResponseWriter, name string, data interface{}) {
+func (s *Server) render(w http.ResponseWriter, page string, data interface{}) {
+	t, ok := s.templates[page]
+	if !ok {
+		log.Printf("Template not found: %s", page)
+		http.Error(w, "Page not found", http.StatusNotFound)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html")
-	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
+	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
 		log.Printf("Template error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
@@ -302,7 +327,7 @@ func (s *Server) handleEnvironmentList(w http.ResponseWriter, r *http.Request) {
 		"Page":         "environments",
 	}
 
-	s.render(w, "layout", data)
+	s.render(w, "environments.html", data)
 }
 
 func (s *Server) handleEnvironmentDetail(w http.ResponseWriter, r *http.Request) {
@@ -323,7 +348,7 @@ func (s *Server) handleEnvironmentDetail(w http.ResponseWriter, r *http.Request)
 		"Page":          "environments",
 	}
 
-	s.render(w, "layout", data)
+	s.render(w, "environments.html", data)
 }
 
 func (s *Server) handleEnvironmentsAPI(w http.ResponseWriter, r *http.Request) {
@@ -438,7 +463,7 @@ func (s *Server) handleUserGeneratorPage(w http.ResponseWriter, r *http.Request)
 		"DBAvailable": s.userGen != nil,
 	}
 
-	s.render(w, "layout", data)
+	s.render(w, "user_generator.html", data)
 }
 
 func (s *Server) handleListUsersAPI(w http.ResponseWriter, r *http.Request) {
