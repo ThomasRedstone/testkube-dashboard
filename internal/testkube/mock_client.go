@@ -312,8 +312,8 @@ func (c *MockClient) GetArtifacts(executionID string) ([]Artifact, error) {
 	}
 
 	return []Artifact{
-		{Name: "playwright-report.zip", Size: 1024 * 1024, Path: "playwright-report.zip"},
-		{Name: "results.json", Size: 1024, Path: "results.json"},
+		{Name: "playwright-report/index.html", Size: 1024 * 1024, Path: "playwright-report/index.html"},
+		{Name: "test-results/results.json", Size: 1024, Path: "test-results/results.json"},
 		{Name: "screenshot.png", Size: 512 * 1024, Path: "screenshot.png"},
 	}, nil
 }

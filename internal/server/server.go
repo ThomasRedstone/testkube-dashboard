@@ -43,11 +43,33 @@ func NewServer(api testkube.Client, db database.Database, userGen *users.UserGen
 		"workflow_history.html",
 	}
 
+	funcMap := template.FuncMap{
+		"div": func(a, b float64) float64 {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+		"float64": func(v interface{}) float64 {
+			switch i := v.(type) {
+			case int:
+				return float64(i)
+			case int64:
+				return float64(i)
+			case float64:
+				return i
+			default:
+				return 0
+			}
+		},
+	}
+
 	layoutPath := filepath.Join(templatesDir, "layout.html")
 	for _, page := range pages {
 		pagePath := filepath.Join(templatesDir, page)
 		// Parse layout first, then the page template
-		t := template.Must(template.ParseFiles(layoutPath, pagePath))
+		t := template.New("layout.html").Funcs(funcMap)
+		t = template.Must(t.ParseFiles(layoutPath, pagePath))
 		templates[page] = t
 	}
 
@@ -75,6 +97,7 @@ func (s *Server) Router() http.Handler {
 	r.Get("/workflows/{name}/history", s.handleWorkflowHistory)
 	r.Get("/executions/{id}", s.handleExecutionDetail)
 	r.Get("/executions/{id}/report", s.handleExecutionReport)
+	r.Get("/executions/{id}/artifacts/*", s.handleDownloadArtifact)
 	r.Get("/executions/{id}/logs", s.handleExecutionLogs)
 
 	// API routes
@@ -241,6 +264,11 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	artifacts, err := s.api.GetArtifacts(id)
+	if err != nil {
+		log.Printf("Error getting artifacts: %v", err)
+	}
+
 	testCases, err := s.db.GetExecutionMetrics(id)
 	if err != nil {
 		log.Printf("Error getting test cases: %v", err)
@@ -249,9 +277,45 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
 		"Execution": exec,
 		"TestCases": testCases,
+		"Artifacts": artifacts,
 	}
 
 	s.render(w, "execution_detail.html", data)
+}
+
+func (s *Server) handleDownloadArtifact(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	path := chi.URLParam(r, "*")
+
+	data, err := s.api.DownloadArtifact(id, path)
+	if err != nil {
+		log.Printf("Error downloading artifact %s: %v", path, err)
+		http.Error(w, "Failed to download artifact", http.StatusInternalServerError)
+		return
+	}
+
+	// Set Content-Type based on extension
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".html":
+		w.Header().Set("Content-Type", "text/html")
+	case ".json":
+		w.Header().Set("Content-Type", "application/json")
+	case ".xml":
+		w.Header().Set("Content-Type", "application/xml")
+	case ".txt":
+		w.Header().Set("Content-Type", "text/plain")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
+	case ".jpg", ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".webm":
+		w.Header().Set("Content-Type", "video/webm")
+	default:
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
+	w.Write(data)
 }
 
 func (s *Server) handleExecutionReport(w http.ResponseWriter, r *http.Request) {

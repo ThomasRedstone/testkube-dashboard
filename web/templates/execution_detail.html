@@ -49,6 +49,20 @@
     </table>
 </div>
 
+<div class="artifacts-section">
+    <h2>Artifacts ({{len .Artifacts}})</h2>
+    <div class="artifacts-list">
+        {{range .Artifacts}}
+        <div class="artifact-item">
+            <a href="/executions/{{$.Execution.ID}}/artifacts/{{.Name}}" target="_blank" class="artifact-link">
+                {{.Name}}
+            </a>
+            <span class="artifact-size">({{printf "%.2f KB" (div (float64 .Size) 1024.0)}})</span>
+        </div>
+        {{end}}
+    </div>
+</div>
+
 <div class="logs-section">
     <h2>Console Logs</h2>
     <pre hx-get="/executions/{{.Execution.ID}}/logs"
