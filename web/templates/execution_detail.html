@@ -49,10 +49,16 @@
     </table>
 </div>
 
+<div class="artifacts-section" hx-get="/executions/{{.Execution.ID}}/artifacts" hx-trigger="load" hx-swap="outerHTML">
+    <h3>Artifacts</h3>
+    <p>Loading artifacts...</p>
+</div>
+
 <div class="logs-section">
     <h2>Console Logs</h2>
-    <pre hx-get="/executions/{{.Execution.ID}}/logs"
-         hx-trigger="load"
-         hx-swap="innerHTML">Loading logs...</pre>
+    <div hx-ext="sse" sse-connect="/executions/{{.Execution.ID}}/logs/stream">
+         <div sse-swap="error" hx-swap="innerHTML"></div>
+         <pre sse-swap="log" hx-swap="beforeend" style="background: #222; color: #eee; padding: 10px; border-radius: 4px; overflow-x: auto; max-height: 500px; overflow-y: scroll; font-family: monospace;"></pre>
+    </div>
 </div>
 {{end}}

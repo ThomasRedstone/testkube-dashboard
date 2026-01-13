@@ -1,6 +1,9 @@
 package testkube
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Execution represents a test execution
 type Execution struct {
@@ -50,4 +53,5 @@ type Client interface {
 	DownloadArtifact(executionID, path string) ([]byte, error)
 	RunWorkflow(name string) (*Execution, error)
 	GetExecutionLogs(executionID string) (string, error)
+	StreamExecutionLogs(ctx context.Context, executionID string) (<-chan string, <-chan error)
 }

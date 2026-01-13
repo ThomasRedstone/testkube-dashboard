@@ -41,6 +41,7 @@ func NewServer(api testkube.Client, db database.Database, userGen *users.UserGen
 		"user_generator.html",
 		"k6_report.html",
 		"workflow_history.html",
+		"artifacts.html",
 	}
 
 	layoutPath := filepath.Join(templatesDir, "layout.html")
@@ -76,6 +77,9 @@ func (s *Server) Router() http.Handler {
 	r.Get("/executions/{id}", s.handleExecutionDetail)
 	r.Get("/executions/{id}/report", s.handleExecutionReport)
 	r.Get("/executions/{id}/logs", s.handleExecutionLogs)
+	r.Get("/executions/{id}/logs/stream", s.handleExecutionLogsStream)
+	r.Get("/executions/{id}/artifacts", s.handleExecutionArtifacts)
+	r.Get("/executions/{id}/artifacts/*", s.handleDownloadArtifact)
 
 	// API routes
 	r.Get("/api/v1/flaky-tests", s.handleFlakyTestsAPI)
@@ -302,6 +306,116 @@ func (s *Server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(logs))
 }
 
+func (s *Server) handleExecutionArtifacts(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	artifacts, err := s.api.GetArtifacts(id)
+	if err != nil {
+		log.Printf("Error getting artifacts: %v", err)
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusInternalServerError)
+		safeErr := template.HTMLEscapeString(err.Error())
+		fmt.Fprintf(w, "<div class='alert alert-danger'>Failed to load artifacts: %s</div>", safeErr)
+		return
+	}
+
+	data := map[string]interface{}{
+		"ExecutionID": id,
+		"Artifacts":   artifacts,
+	}
+
+	s.renderPartial(w, "artifacts.html", data)
+}
+
+func (s *Server) handleDownloadArtifact(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	path := chi.URLParam(r, "*")
+
+	data, err := s.api.DownloadArtifact(id, path)
+	if err != nil {
+		log.Printf("Error downloading artifact %s: %v", path, err)
+		http.Error(w, "Failed to download artifact", http.StatusInternalServerError)
+		return
+	}
+
+	// Detect content type
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".html":
+		w.Header().Set("Content-Type", "text/html")
+	case ".json":
+		w.Header().Set("Content-Type", "application/json")
+	case ".txt":
+		w.Header().Set("Content-Type", "text/plain")
+	case ".xml":
+		w.Header().Set("Content-Type", "application/xml")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
+	case ".jpg", ".jpeg":
+		w.Header().Set("Content-Type", "image/jpeg")
+	case ".zip":
+		w.Header().Set("Content-Type", "application/zip")
+	}
+
+	w.Write(data)
+}
+
+func (s *Server) handleExecutionLogsStream(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	// Set headers for SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Get stream from client
+	logsCh, errCh := s.api.StreamExecutionLogs(r.Context(), id)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case err := <-errCh:
+			if err != nil {
+				// Send error as HTML
+				safeErr := template.HTMLEscapeString(err.Error())
+				fmt.Fprintf(w, "event: error\ndata: <div class='alert alert-danger'>%s</div>\n\n", safeErr)
+				flusher.Flush()
+			}
+			return
+		case line, ok := <-logsCh:
+			if !ok {
+				// Stream ended
+				// We can send a finished event if needed, or just close connection
+				// If we close connection, client might reconnect.
+				// Better to stay open or send specific event to stop retry?
+				// HTMX SSE documentation says:
+				// "If the server closes the connection, the browser will attempt to reconnect."
+				// We can send an event that removes the sse extension or something, but easiest is
+				// just to return and let client handle disconnect/reconnect logic or just have it reconnect.
+				// But we don't want it to reconnect and stream all logs again.
+				// Sending a specific event "done" could let client JS handle it, but we want to avoid custom JS.
+				// If we just return, it reconnects.
+				// Maybe we can just hang here until context done?
+				// If execution is finished, keeping connection open is useless but harmless?
+				// Let's just return for now.
+				return
+			}
+			// Escape HTML to be safe since we insert into DOM
+			safeLine := template.HTMLEscapeString(line)
+			// Append newline for pre tag. In SSE, multiple data lines create newlines.
+			fmt.Fprintf(w, "event: log\ndata: %s\ndata:\n\n", safeLine)
+			flusher.Flush()
+		}
+	}
+}
+
 func (s *Server) handleFlakyTestsAPI(w http.ResponseWriter, r *http.Request) {
 	flakyTests, err := s.db.GetFlakyTests(0.1)
 	if err != nil {
@@ -323,6 +437,20 @@ func (s *Server) render(w http.ResponseWriter, page string, data interface{}) {
 	}
 	w.Header().Set("Content-Type", "text/html")
 	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
+		log.Printf("Template error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) renderPartial(w http.ResponseWriter, page string, data interface{}) {
+	t, ok := s.templates[page]
+	if !ok {
+		log.Printf("Template not found: %s", page)
+		http.Error(w, "Page not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	if err := t.ExecuteTemplate(w, "content", data); err != nil {
 		log.Printf("Template error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
