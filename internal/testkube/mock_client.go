@@ -1,6 +1,7 @@
 package testkube
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -338,4 +339,83 @@ func (c *MockClient) GetExecutionLogs(executionID string) (string, error) {
 		return strings.Join(logs, "\n"), nil
 	}
 	return "", fmt.Errorf("logs not found")
+}
+
+func (c *MockClient) StreamExecutionLogs(ctx context.Context, executionID string) (<-chan string, <-chan error) {
+	logsCh := make(chan string)
+	errCh := make(chan error)
+
+	go func() {
+		defer close(logsCh)
+		defer close(errCh)
+
+		// Send existing logs
+		c.mu.RLock()
+		existingLogs := c.logs[executionID]
+		status := "unknown"
+		for _, e := range c.executions {
+			if e.ID == executionID {
+				status = e.Status
+				break
+			}
+		}
+		c.mu.RUnlock()
+
+		for _, logLine := range existingLogs {
+			select {
+			case <-ctx.Done():
+				return
+			case logsCh <- logLine:
+			}
+		}
+
+		if status == "passed" || status == "failed" {
+			return
+		}
+
+		// Simulate streaming new logs if running
+		// Since in mock mode the simulation runs in background and updates c.logs,
+		// we need to poll for changes or just simulate delays here.
+		// For simplicity, we just assume the simulation is fast enough or we just replay.
+		// A better approach would be to subscribe to updates, but for mock polling is fine.
+
+		lastIndex := len(existingLogs)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.mu.RLock()
+				currentLogs := c.logs[executionID]
+				currentStatus := ""
+				for _, e := range c.executions {
+					if e.ID == executionID {
+						currentStatus = e.Status
+						break
+					}
+				}
+				c.mu.RUnlock()
+
+				if len(currentLogs) > lastIndex {
+					for i := lastIndex; i < len(currentLogs); i++ {
+						select {
+						case <-ctx.Done():
+							return
+						case logsCh <- currentLogs[i]:
+						}
+					}
+					lastIndex = len(currentLogs)
+				}
+
+				if currentStatus == "passed" || currentStatus == "failed" {
+					return
+				}
+			}
+		}
+	}()
+
+	return logsCh, errCh
 }

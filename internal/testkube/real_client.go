@@ -1,6 +1,8 @@
 package testkube
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -483,6 +485,60 @@ func (c *RealClient) GetExecutionLogs(executionID string) (string, error) {
 	}
 
 	return string(data), nil
+}
+
+func (c *RealClient) StreamExecutionLogs(ctx context.Context, executionID string) (<-chan string, <-chan error) {
+	logsCh := make(chan string)
+	errCh := make(chan error)
+
+	go func() {
+		defer close(logsCh)
+		defer close(errCh)
+
+		apiURL := fmt.Sprintf("%s/v1/test-workflow-executions/%s/logs", c.baseURL, executionID)
+		req, err := http.NewRequest("GET", apiURL, nil)
+		if err != nil {
+			errCh <- fmt.Errorf("failed to create request: %w", err)
+			return
+		}
+
+		req = req.WithContext(ctx)
+
+		if c.token != "" {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
+		}
+
+		// Use a client without timeout for streaming
+		client := &http.Client{}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			errCh <- fmt.Errorf("API request failed: %w", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			errCh <- fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+			return
+		}
+
+		reader := bufio.NewScanner(resp.Body)
+		for reader.Scan() {
+			select {
+			case <-ctx.Done():
+				return
+			case logsCh <- reader.Text():
+			}
+		}
+
+		if err := reader.Err(); err != nil {
+			errCh <- fmt.Errorf("error reading logs: %w", err)
+		}
+	}()
+
+	return logsCh, errCh
 }
 
 // Helper function to extract workflow type from container image

@@ -1,0 +1,29 @@
+{{define "content"}}
+<div class="artifacts-list">
+    <h3>Artifacts</h3>
+    {{if .Artifacts}}
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Size</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .Artifacts}}
+            <tr>
+                <td>{{.Name}}</td>
+                <td>{{.Size}} bytes</td>
+                <td>
+                    <a href="/executions/{{$.ExecutionID}}/artifacts/{{.Path}}" class="btn-link" target="_blank">Download</a>
+                </td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <p>No artifacts found.</p>
+    {{end}}
+</div>
+{{end}}
