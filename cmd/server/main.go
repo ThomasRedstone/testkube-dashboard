@@ -5,10 +5,13 @@ import (
 	"net/http"
 	"os"
 
+	"context"
+
 	"github.com/testkube/dashboard/internal/database"
 	"github.com/testkube/dashboard/internal/server"
 	"github.com/testkube/dashboard/internal/testkube"
 	"github.com/testkube/dashboard/internal/users"
+	"github.com/testkube/dashboard/internal/worker"
 )
 
 func main() {
@@ -36,11 +39,27 @@ func main() {
 		log.Println("✓ Connected to Testkube API")
 	}
 
-	// Database still uses mock for Phase 2 (PostgreSQL comes in Phase 3)
-	db := database.NewMockDatabase()
+	// Database configuration
+	var db database.Database
+	dbURL := os.Getenv("DATABASE_URL")
+
+	if dbURL != "" {
+		log.Println("Initializing PostgreSQL database...")
+		pgDB, err := database.NewPostgresDatabase(dbURL)
+		if err != nil {
+			log.Printf("Failed to connect to PostgreSQL (falling back to mock): %v", err)
+			db = database.NewMockDatabase()
+		} else {
+			log.Println("✓ Connected to PostgreSQL")
+			db = pgDB
+		}
+	} else {
+		log.Println("Using Mock Database (DATABASE_URL not set)")
+		db = database.NewMockDatabase()
+	}
 
 	var userGen *users.UserGenerator
-	if os.Getenv("DATABASE_URL") != "" {
+	if dbURL != "" {
 		var err error
 		userGen, err = users.NewUserGenerator()
 		if err != nil {
@@ -57,6 +76,11 @@ func main() {
 
 	port := ":8080"
 	log.Printf("Starting Testkube Dashboard on %s", port)
+	// Start background worker
+	w := worker.NewWorker(api, db)
+	// Run in a separate goroutine
+	go w.Start(context.Background())
+
 	if err := http.ListenAndServe(port, srv.Router()); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
