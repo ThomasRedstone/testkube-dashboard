@@ -6,6 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-echarts/go-echarts/v2 v2.6.7
 	github.com/go-sql-driver/mysql v1.9.3
+	github.com/lib/pq v1.10.9
 	github.com/stretchr/testify v1.6.0
 )
 
