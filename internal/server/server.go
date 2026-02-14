@@ -65,6 +65,10 @@ func NewServer(api testkube.Client, db database.Database, userGen *users.UserGen
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 
+	// Health endpoints (no dependencies, always ready)
+	r.Get("/healthz", s.handleHealthz)
+	r.Get("/readyz", s.handleReadyz)
+
 	// Static files
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir(filepath.Join(s.rootDir, "web/static")))))
 
@@ -426,6 +430,18 @@ func (s *Server) handleFlakyTestsAPI(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(flakyTests)
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 }
 
 func (s *Server) render(w http.ResponseWriter, page string, data interface{}) {

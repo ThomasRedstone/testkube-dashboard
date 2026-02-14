@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/testkube/dashboard/internal/database"
 	"github.com/testkube/dashboard/internal/server"
@@ -56,8 +60,28 @@ func main() {
 	srv := server.NewServer(api, db, userGen, rootDir)
 
 	port := ":8080"
+	httpServer := &http.Server{
+		Addr:    port,
+		Handler: srv.Router(),
+	}
+
+	// Graceful shutdown
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigCh
+		log.Printf("Received signal %v, shutting down...", sig)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(ctx); err != nil {
+			log.Printf("Graceful shutdown failed: %v", err)
+		}
+	}()
+
 	log.Printf("Starting Testkube Dashboard on %s", port)
-	if err := http.ListenAndServe(port, srv.Router()); err != nil {
+	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server failed: %v", err)
 	}
+	log.Println("Server stopped.")
 }

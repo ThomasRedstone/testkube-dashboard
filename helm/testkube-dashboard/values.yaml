@@ -1,10 +1,10 @@
-replicaCount: 0
+replicaCount: 1
 
 image:
   registry: ""
   repository: "testkube-dashboard"
   tag: "latest"
-  pullPolicy: Never
+  pullPolicy: IfNotPresent
 
 service:
   type: ClusterIP
@@ -15,6 +15,7 @@ ingress:
   enabled: true
   className: nginx
   host: "testkube.k8s.local"
+  annotations: {}
 
 resources:
   requests:
@@ -25,12 +26,27 @@ resources:
     cpu: "200m"
 
 serviceAccount:
-  create: false
+  create: true
   name: ""
   annotations: {}
 
 healthCheck:
-  enabled: false
+  enabled: true
+  path: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
 
 readinessCheck:
-  enabled: false
+  enabled: true
+  path: /readyz
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+env: []
+envFrom: []
+volumes: []
+volumeMounts: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
