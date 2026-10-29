@@ -13,6 +13,7 @@ import (
 	"github.com/testkube/dashboard/internal/server"
 	"github.com/testkube/dashboard/internal/testkube"
 	"github.com/testkube/dashboard/internal/users"
+	"github.com/testkube/dashboard/internal/worker"
 )
 
 func main() {
@@ -40,11 +41,28 @@ func main() {
 		log.Println("✓ Connected to Testkube API")
 	}
 
-	// Database still uses mock for Phase 2 (PostgreSQL comes in Phase 3)
-	db := database.NewMockDatabase()
+	// Database configuration
+	var db database.Database
+	var pgDB *database.PostgresDatabase
+	dbURL := os.Getenv("DATABASE_URL")
+
+	if dbURL != "" {
+		log.Println("Initializing PostgreSQL database...")
+		pgDB, err = database.NewPostgresDatabase(dbURL)
+		if err != nil {
+			log.Printf("Failed to connect to PostgreSQL (falling back to mock): %v", err)
+			db = database.NewMockDatabase()
+		} else {
+			log.Println("✓ Connected to PostgreSQL")
+			db = pgDB
+		}
+	} else {
+		log.Println("Using Mock Database (DATABASE_URL not set)")
+		db = database.NewMockDatabase()
+	}
 
 	var userGen *users.UserGenerator
-	if os.Getenv("DATABASE_URL") != "" {
+	if dbURL != "" {
 		var err error
 		userGen, err = users.NewUserGenerator()
 		if err != nil {
@@ -65,12 +83,21 @@ func main() {
 		Handler: srv.Router(),
 	}
 
+	// The artifact worker only has somewhere to write when PostgreSQL is in use.
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	defer stopWorker()
+	if pgDB != nil {
+		defer pgDB.Close()
+		go worker.NewWorker(api, db).Start(workerCtx)
+	}
+
 	// Graceful shutdown
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-sigCh
 		log.Printf("Received signal %v, shutting down...", sig)
+		stopWorker()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
