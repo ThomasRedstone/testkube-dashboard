@@ -20,15 +20,21 @@ func NewPostgresDatabase(dsn string) (*PostgresDatabase, error) {
 	}
 
 	if err := db.Ping(); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	pgDb := &PostgresDatabase{db: db}
 	if err := pgDb.InitSchema(); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to init schema: %w", err)
 	}
 
 	return pgDb, nil
+}
+
+func (d *PostgresDatabase) Close() error {
+	return d.db.Close()
 }
 
 func (d *PostgresDatabase) InitSchema() error {
@@ -38,8 +44,8 @@ func (d *PostgresDatabase) InitSchema() error {
 			name TEXT,
 			workflow_name TEXT NOT NULL,
 			status TEXT NOT NULL,
-			started_at TIMESTAMP NOT NULL,
-			finished_at TIMESTAMP,
+			started_at TIMESTAMPTZ NOT NULL,
+			finished_at TIMESTAMPTZ,
 			duration_ms INTEGER,
 			branch TEXT,
 			labels JSONB
@@ -53,7 +59,7 @@ func (d *PostgresDatabase) InitSchema() error {
 			duration_ms INTEGER,
 			error_message TEXT,
 			retry_count INTEGER DEFAULT 0,
-			created_at TIMESTAMP DEFAULT NOW(),
+			created_at TIMESTAMPTZ DEFAULT NOW(),
 			UNIQUE(execution_id, test_name)
 		);`,
 		`CREATE TABLE IF NOT EXISTS k6_metrics (
@@ -66,7 +72,7 @@ func (d *PostgresDatabase) InitSchema() error {
 			avg_value FLOAT,
 			p95_value FLOAT,
 			p99_value FLOAT,
-			created_at TIMESTAMP DEFAULT NOW()
+			created_at TIMESTAMPTZ DEFAULT NOW()
 		);`,
 		`CREATE TABLE IF NOT EXISTS flaky_tests (
 			test_name TEXT PRIMARY KEY,
@@ -74,7 +80,7 @@ func (d *PostgresDatabase) InitSchema() error {
 			failed_runs INTEGER DEFAULT 0,
 			passed_runs INTEGER DEFAULT 0,
 			flaky_score FLOAT,
-			last_failure TIMESTAMP
+			last_failure TIMESTAMPTZ
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_test_cases_name ON test_cases(test_name);`,
 		`CREATE INDEX IF NOT EXISTS idx_test_cases_status ON test_cases(status, created_at);`,
@@ -96,6 +102,12 @@ func (d *PostgresDatabase) InsertExecution(exec testkube.Execution) error {
 		durationMs = exec.Duration.Milliseconds()
 	}
 
+	// A zero EndTime means the execution has not finished; store NULL.
+	var finishedAt *time.Time
+	if !exec.EndTime.IsZero() {
+		finishedAt = &exec.EndTime
+	}
+
 	// For now, ignoring labels JSONB as we don't use it yet
 	_, err := d.db.Exec(`
 		INSERT INTO test_executions (id, name, workflow_name, status, started_at, finished_at, duration_ms, branch)
@@ -104,7 +116,7 @@ func (d *PostgresDatabase) InsertExecution(exec testkube.Execution) error {
 			status = EXCLUDED.status,
 			finished_at = EXCLUDED.finished_at,
 			duration_ms = EXCLUDED.duration_ms
-	`, exec.ID, exec.Name, exec.WorkflowName, exec.Status, exec.StartTime, exec.EndTime, durationMs, exec.Branch)
+	`, exec.ID, exec.Name, exec.WorkflowName, exec.Status, exec.StartTime, finishedAt, durationMs, exec.Branch)
 	return err
 }
 
@@ -130,7 +142,7 @@ func (d *PostgresDatabase) GetTrends(days int) (*TrendData, error) {
 	// This should be more complex calculating actual trends
 	var total, passed int
 	err := d.db.QueryRow(`
-		SELECT COUNT(*), SUM(CASE WHEN status = 'passed' THEN 1 ELSE 0 END)
+		SELECT COUNT(*), COALESCE(SUM(CASE WHEN status = 'passed' THEN 1 ELSE 0 END), 0)
 		FROM test_executions
 		WHERE started_at > NOW() - make_interval(days => $1)
 	`, days).Scan(&total, &passed)

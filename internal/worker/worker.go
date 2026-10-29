@@ -30,6 +30,7 @@ func (w *Worker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
+	w.processExecutions()
 	for {
 		select {
 		case <-ctx.Done():
@@ -46,9 +47,10 @@ func (w *Worker) processExecutions() {
 	// or have a queue. For now, we'll fetch recent executions and check if we have data for them.
 	// This is a naive implementation.
 
+	// Failed runs carry the results that matter most, so take every status and
+	// skip the ones that have not finished yet.
 	executions, err := w.api.GetExecutions(testkube.ListOptions{
 		PageSize: 20,
-		Status:   "passed", // Only process passed executions for now? Or failed too?
 	})
 	if err != nil {
 		log.Printf("Worker: failed to fetch executions: %v", err)
@@ -56,6 +58,10 @@ func (w *Worker) processExecutions() {
 	}
 
 	for _, exec := range executions {
+		if exec.Status != "passed" && exec.Status != "failed" {
+			continue
+		}
+
 		// Store execution details
 		if err := w.db.InsertExecution(exec); err != nil {
 			log.Printf("Worker: failed to insert execution %s: %v", exec.ID, err)
@@ -63,8 +69,11 @@ func (w *Worker) processExecutions() {
 
 		// Check if we already have metrics for this execution
 		// (optimization to avoid re-downloading)
+		// k6 rows are checked too: they have no unique key, so re-parsing
+		// a k6-only execution would duplicate them every tick.
 		metrics, _ := w.db.GetExecutionMetrics(exec.ID)
-		if len(metrics) > 0 {
+		k6Metrics, _ := w.db.GetK6Metrics(exec.ID)
+		if len(metrics) > 0 || len(k6Metrics) > 0 {
 			continue
 		}
 
@@ -105,8 +114,8 @@ type PlaywrightResults struct {
 		Specs []struct {
 			File  string `json:"file"`
 			Tests []struct {
-				Title    string `json:"title"`
-				Results  []struct {
+				Title   string `json:"title"`
+				Results []struct {
 					Status   string `json:"status"`
 					Duration int    `json:"duration"`
 					Error    struct {
