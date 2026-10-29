@@ -109,22 +109,65 @@ func isK6Summary(name string) bool {
 	return filepath.Base(name) == "summary.json" && filepath.Dir(name) == "k6-results"
 }
 
+// PlaywrightResults is the shape of Playwright's JSON reporter output. The
+// test title lives on the spec; describe blocks nest as child suites; each
+// spec has one test per project, and each test one result per attempt.
 type PlaywrightResults struct {
-	Suites []struct {
-		Specs []struct {
-			File  string `json:"file"`
-			Tests []struct {
-				Title   string `json:"title"`
-				Results []struct {
-					Status   string `json:"status"`
-					Duration int    `json:"duration"`
-					Error    struct {
-						Message string `json:"message"`
-					} `json:"error"`
-				} `json:"results"`
-			} `json:"tests"`
-		} `json:"specs"`
-	} `json:"suites"`
+	Suites []PlaywrightSuite `json:"suites"`
+}
+
+type PlaywrightSuite struct {
+	Suites []PlaywrightSuite `json:"suites"`
+	Specs  []struct {
+		Title string `json:"title"`
+		File  string `json:"file"`
+		Tests []struct {
+			ProjectName string `json:"projectName"`
+			Results     []struct {
+				Status   string `json:"status"`
+				Duration int    `json:"duration"`
+				Error    struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			} `json:"results"`
+		} `json:"tests"`
+	} `json:"specs"`
+}
+
+// playwrightTestCases flattens a report into one row per spec and project,
+// taking the final attempt as the outcome and counting the earlier ones as
+// retries.
+func playwrightTestCases(executionID string, results PlaywrightResults) []database.TestCase {
+	var cases []database.TestCase
+	var walk func(suites []PlaywrightSuite)
+	walk = func(suites []PlaywrightSuite) {
+		for _, suite := range suites {
+			for _, spec := range suite.Specs {
+				for _, test := range spec.Tests {
+					if len(test.Results) == 0 {
+						continue
+					}
+					name := spec.Title
+					if test.ProjectName != "" {
+						name += " [" + test.ProjectName + "]"
+					}
+					last := test.Results[len(test.Results)-1]
+					cases = append(cases, database.TestCase{
+						ExecutionID:  executionID,
+						TestName:     name,
+						FilePath:     spec.File,
+						Status:       last.Status,
+						DurationMs:   last.Duration,
+						ErrorMessage: last.Error.Message,
+						RetryCount:   len(test.Results) - 1,
+					})
+				}
+			}
+			walk(suite.Suites)
+		}
+	}
+	walk(results.Suites)
+	return cases
 }
 
 func (w *Worker) parsePlaywrightJSON(executionID string, artifact testkube.Artifact) {
@@ -140,23 +183,9 @@ func (w *Worker) parsePlaywrightJSON(executionID string, artifact testkube.Artif
 		return
 	}
 
-	for _, suite := range results.Suites {
-		for _, spec := range suite.Specs {
-			for _, test := range spec.Tests {
-				for _, res := range test.Results {
-					tc := database.TestCase{
-						ExecutionID:  executionID,
-						TestName:     test.Title,
-						FilePath:     spec.File,
-						Status:       res.Status,
-						DurationMs:   res.Duration,
-						ErrorMessage: res.Error.Message,
-					}
-					if err := w.db.InsertTestCase(tc); err != nil {
-						log.Printf("Worker: failed to insert test case: %v", err)
-					}
-				}
-			}
+	for _, tc := range playwrightTestCases(executionID, results) {
+		if err := w.db.InsertTestCase(tc); err != nil {
+			log.Printf("Worker: failed to insert test case: %v", err)
 		}
 	}
 	log.Printf("Worker: processed Playwright results for %s", executionID)
